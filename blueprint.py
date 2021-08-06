@@ -1,0 +1,353 @@
+import base64, zlib, json, copy, math, struct, argparse
+
+import numpy as np
+
+from util import *
+
+
+BELT_TYPES = {
+    'normal'  : ('transport-belt', 'underground-belt', 'splitter'),
+    'fast'    : ('fast-transport-belt', 'fast-underground-belt', 'fast-splitter'),
+    'express' : ('express-transport-belt', 'express-underground-belt', 'express-splitter'),
+}
+
+def encode_factorio_version(major, minor, patch, developer):
+    return struct.unpack('<Q', struct.pack('<HHHH', major, minor, patch, developer))[0]
+
+def decode_factorio_version(value):
+    return struct.unpack('<HHHH', struct.pack('<Q', value))
+
+def decode_blueprint(string):
+    version = string[0]
+    if version != '0':
+        raise RuntimeError('Invalid blueprint version')
+    string = string[1:]
+    compressed = base64.b64decode(string)
+    raw_bytes = zlib.decompress(compressed)
+    data = json.loads(raw_bytes)
+    return data
+
+def encode_blueprint(data):
+    raw_bytes = json.dumps(data).encode('utf-8')
+    compressed = zlib.compress(raw_bytes, level=9)
+    string = base64.b64encode(compressed).decode('utf-8')
+    return '0' + string
+
+def direction_to_factorio_direction(direction: int):
+    return ((1 - direction) % 4) * 2
+
+def direction_from_factorio_direction(direction: int):
+    return (1 - (direction // 2)) % 4
+
+BLUEPRINT_TEMPLATE = {'blueprint': {'icons': [{'signal': {'type': 'item', 'name': 'splitter'}, 'index': 1}], 'item': 'blueprint', 'version': 281474976710656}}
+def make_blueprint(tiles, label=None, belt_level='normal'):
+    belt, underground_belt, splitter = BELT_TYPES[belt_level]
+
+    entities = []
+    entity_number = 1
+    for x in range(tiles.shape[0]):
+        for y in range(tiles.shape[1]):
+            tile = tiles[x,y]
+            if tile is None or (isinstance(tile, Splitter) and tile.side == 1):
+                continue
+            
+            entity = {'entity_number': entity_number, 'position': {'x': x + 0.5, 'y': y + 0.5}}
+            if isinstance(tile, Belt):
+                entity['name'] = belt
+
+                direction = direction_to_factorio_direction(tile.output_direction)
+                if direction != 0:
+                    entity['direction'] = direction
+            elif isinstance(tile, UndergroundBelt):
+                entity['name'] = underground_belt
+
+                direction = direction_to_factorio_direction(tile.direction)
+                if direction != 0:
+                    entity['direction'] = direction
+                
+                entity['type'] = 'input' if tile.is_input else 'output'
+            elif isinstance(tile, Splitter):
+                entity['name'] = splitter
+                
+                direction = direction_to_factorio_direction(tile.direction)
+                if direction != 0:
+                    entity['direction'] = direction
+
+                dx, dy = direction_to_vec((tile.direction + 1) % 4)
+                entity['position']['x'] += dx/2
+                entity['position']['y'] += dy/2
+            elif isinstance(tile, Inserter):
+                 # invert direction
+
+                if tile.type == 0: # Normal
+                    entity['name'] = 'inserter'
+                elif tile.type == 1: # Long
+                    entity['name'] = 'long-handed-inserter'
+                
+                direction = direction_to_factorio_direction((tile.direction - 2) % 4)
+                if direction != 0:
+                    entity['direction'] = direction
+            else:
+                print(tile)
+                assert False
+            entities.append(entity)
+            entity_number += 1
+
+    result = copy.deepcopy(BLUEPRINT_TEMPLATE)
+    if label is not None:
+        result['blueprint']['label'] = label
+    result['blueprint']['entities'] = entities
+    return result
+
+class TempBelt:
+    def __init__(self, direction):
+        self.output_direction = direction
+
+def resolve_belt_input_directions(tiles):
+    for x in range(tiles.shape[0]):
+        for y in range(tiles.shape[1]):
+            tile = tiles[x,y]
+            if tile is None:
+                continue
+            if not isinstance(tile, TempBelt):
+                continue
+            
+            input_direction = None
+            for direction in range(4):
+                dx, dy = direction_to_vec(direction)
+
+                x1 = x - dx
+                y1 = y - dy
+                if x1 < 0 or x1 >= tiles.shape[0] or y1 < 0 or y1 >= tiles.shape[1]:
+                    continue
+
+                neighbour = tiles[x1, y1]
+                if neighbour is None:
+                    continue
+
+                if neighbour.output_direction != direction:
+                    continue
+
+                if input_direction is None:
+                    input_direction = direction
+                else:
+                    input_direction = None
+                    break
+
+            if input_direction is None:
+                input_direction = tile.output_direction
+            
+            tiles[x,y] = Belt(input_direction, tile.output_direction)
+
+def import_blueprint(data):
+    if len(data['blueprint']['entities']) == 0:
+        return np.full((0,0), None)
+
+    entities = {}
+
+    
+
+    for entity in data['blueprint']['entities']:
+        pos = entity['position']['x'], entity['position']['y']
+        name = entity['name']
+        direction = direction_from_factorio_direction(entity.get('direction', 0))
+
+        floor_pos = math.floor(pos[0]), math.floor(pos[1])
+
+        if any(name == splitter_type for _, _, splitter_type in BELT_TYPES.values()):
+            dx, dy = direction_to_vec((direction + 1) % 4)
+            x, y = pos
+            entities[math.floor(x - dx/2), math.floor(y - dy/2)] = Splitter(direction, 0)
+            entities[math.floor(x + dx/2), math.floor(y + dy/2)] = Splitter(direction, 1)
+        elif any(name == belt_type for belt_type, _, _ in BELT_TYPES.values()):
+            entities[floor_pos] = TempBelt(direction)
+        elif any(name == underground_type for _, underground_type, _ in BELT_TYPES.values()):
+            entities[floor_pos] = UndergroundBelt(direction, entity['type'] == 'input')
+        elif name in ('burner-inserter', 'inserter', 'fast-inserter', 'filter-inserter', 'stack-inserter', 'stack-filter-inserter'):
+            entities[floor_pos] = Inserter((direction + 2) % 4, 0)
+        elif name == 'long-handed-inserter':
+            entities[floor_pos] = Inserter((direction + 2) % 4, 1)
+        elif name.startswith('assembling-machine-'):
+            x0 = floor_pos[0] - 1
+            y0 = floor_pos[1] - 1
+            for dx in range(3):
+                for dy in range(3):
+                    entities[x0 + dx, y0 + dy] = AssemblingMachine(dx, dy)
+        else:
+            raise RuntimeError('Unsupported entity: ' + name)
+    
+    min_x = min(x for x, _ in entities)
+    min_y = min(y for _, y in entities)
+
+    old_entities = entities.copy()
+    entities.clear()
+    for (x, y), tile in old_entities.items():
+        entities[x - min_x, y - min_y] = tile
+
+    width = max(x for x, _ in entities) + 1
+    height = max(y for _, y in entities) + 1
+
+    tiles = np.full((width, height), None)
+    for pos, entity in entities.items():
+        tiles[pos] = entity
+    del entities
+
+
+    resolve_belt_input_directions(tiles)
+    return tiles
+
+def read_tile(item):
+    input_direction = item['input_direction']
+    output_direction = item['output_direction']
+    if 'is_empty' in item:
+        if item['is_empty']:
+            tile = None
+        elif item['is_belt']:
+            if input_direction is None:
+                input_direction = item['colour_direction']
+            if output_direction is None:
+                output_direction = item['colour_direction']
+
+            assert input_direction is not None or output_direction is not None
+
+            tile = Belt(input_direction, output_direction)
+        elif item['is_underground_in']:
+            tile = UndergroundBelt(input_direction, True)
+        elif item['is_underground_out']:
+            tile = UndergroundBelt(output_direction, False)
+        elif item['is_splitter'] is not None and not item['is_splitter'] is False:
+            try:
+                tile = Splitter(item['colour_direction'], item['is_splitter'])
+            except KeyError:
+                tile = Splitter(item['splitter_direction'], item['splitter_side'])
+        elif item['is_inserter'] is not None:
+            tile = Inserter(item['inserter_direction'], item['is_inserter'])
+        elif item['is_assembling_machine']:
+            tile = AssemblingMachine(item['assembling_x'], item['assembling_y'])
+        else:
+            assert False
+    else:
+        if item['is_splitter'] is not None:
+            direction = input_direction
+            if direction is None:
+                direction = output_direction
+                assert direction is not None
+            tile = Splitter(direction, item['is_splitter'])
+        elif input_direction is None and output_direction is None:
+            tile = None
+        elif input_direction is None or output_direction is None:
+            direction = input_direction
+            if direction is None:
+                direction = output_direction
+                assert direction is not None
+            tile = UndergroundBelt(direction, output_direction is None)
+        else:
+            tile = Belt(input_direction, output_direction)
+    return tile
+
+def write_tile_flow(tile):
+    item = {
+        'is_empty'              : False, 
+        'is_belt'               : False, 
+        'is_underground_in'     : False, 
+        'is_underground_out'    : False, 
+        'is_splitter'           : None,
+        'is_inserter'           : None,
+        'is_assembling_machine' : False,
+        'assembling_x'          : None,
+        'assembling_y'          : None,
+        'alt_direction'         : None,
+    }
+    if tile is None:
+        item['is_empty'] = True
+    elif isinstance(tile, Inserter):
+        item['is_inserter'] = tile.type
+        item['alt_direction'] = tile.direction
+    elif isinstance(tile, Splitter):
+        item['is_splitter'] = tile.side
+        item['alt_direction'] = tile.direction
+    elif isinstance(tile, UndergroundBelt):
+        if tile.is_input:
+            item['is_underground_in'] = True
+        else:
+            item['is_underground_out'] = True
+    elif isinstance(tile, Belt):
+        item['is_belt'] = True
+    elif isinstance(tile, AssemblingMachine):
+        item['is_assembling_machine'] = True
+        item['assembling_x'] = tile.x
+        item['assembling_y'] = tile.y
+    else:
+        assert False
+
+    if tile is None:
+        item['input_direction'] = None
+        item['output_direction'] = None
+    else:
+        item['input_direction'] = tile.input_direction
+        item['output_direction'] = tile.output_direction
+    return item
+
+def write_tile_simple(tile):
+    item = {'is_splitter' : None}
+    if tile is None:
+        item['input_direction'] = None
+        item['output_direction'] = None
+    else:
+        if isinstance(tile, Inserter):
+            raise RuntimeError('Unsupported entity {} for format "simple"'.format(tile))
+        
+        if isinstance(tile, Splitter):
+            item['is_splitter'] = tile.side
+        item['input_direction'] = tile.input_direction
+        item['output_direction'] = tile.output_direction
+    return item
+
+# test_string1 = '0eNqdlllqwzAQhu8yz0rwaPGiq5RSsoggcGQjy6Uh+O61E0jdOk5HejIymm/2H11hX/em9dYF0Fewh8Z1oN+u0NmT29XTv3BpDWiwwZyBgdudp1PwO9e1jQ+bvakDDAysO5ov0Diwf427trYhGD8z48M7A+OCDdbcA7gdLh+uP+/HmxqX1gzaphsNGjd5mnxn5VYxuIDeYKZG+NF6c7hf4FNcf5icxKx+mPJ/plgr0Wuy2hLilQ92P1bNn3wzftfomM3iXtDZozOu7af+LZwpeiJzV6RE8gg2vkrjCbtIYy/ilk/YJWVgkEcNTBURr/hdiyc0zNJwpLYhRg2gJA1g04eVCUQekYuMzUWQeqmiBAVlrEoJAlSlSQonlSFPW3MavEgVLJEgWFimbT5f2aQqDScoleGJa0oqO8c0uKBIIE9cSlrkIlVgRIrAcBmrAYt1HV8tt7eNnr2jGHwa390vlCgLWRV5gVmu8mH4BmLXCV8='
+# test_string2 = '0eNqd0cFqwzAMBuBXGf9ZLUvqOJsfYpcdSxlJK4YhkYPtjoXgd5/dXFbaHdajhPxJshb0w5knbyXCLLBHJwFmvyDYT+mGkovzxDCwkUcQpBtLFH0nYXI+bnoeIhLByom/Yap0ILBEGy2v0iWYP+Q89uxzwV8GYXIhP3NSumaq3jXbhjDDbJTeNinRDVY/hLUZI5ys5+NaUd+hd/+g9dWcV7S+Q6uH6JupVfnqy1nMrysShi5jOffuRn56K40IX+zDuupLpVr12uq2etaNTukH/u6nFA=='
+# test_string3 = '0eNqd01FrwyAQB/Dv8n+2pUmNZn6VMkbSHkNILkHtWAh+95nmZawpLD6enL9T75zRdncaneUAM8NeB/YwlxnefnLTLWthGgkGNlAPAW76JQquYT8OLhxa6gKigOUbfcMU8V2AONhgaZUewfTB974llxJeGQLj4NO2gZeqiSrPxbESmGAOsj5WqcbNOrquGWUUT3S5gz7to8876PI1LTdomXVqnegNrMrC1Damslql/l5abdA66z3/RddZtH5uVRrkx9CbX39E4IucX8ekLqSWb1rp4qQqFeMP2woSEw=='
+
+# test_string4 = '0eNqV0dsKgzAMANB/yXMnttZbf2WM4SWMglZp65hI/31VGWzqg3trSnISkgnKZsBeS2VBTCCrThkQ1wmMfKiimf/s2CMIkBZbIKCKdomUQW1RgyP+XeMLBHU3AqistBJXYwnGuxra0mcKuq8m0HfGF3Rq7uQRFtEgJjCCuERhEHu9lhqrNSNxZIeyU2j4QVm+RfkBGv03Kcu2KDtA+SmU/Uw6r3RZvPi6E4EnarP2yShPeZ4mKQ2TOHHuDa6olS8='
+# test_string5 = '0eNp9jssOgjAURP9l1oVY5SH9FWNMwRu9Cb0QWoyE9N+luHHlciYzJ2dF2880TiwBZgV3g3iYywrPD7F96sIyEgw4kIOCWJeS9Z5c27M8Mme7JwtlGlGB5U5vGB2vCiSBA9OXt4flJrNradoG/0kK4+C38yDJYANmpyIvFRaYpsnLmPC7kPnxV3jR5PfP8ayLumjqqtaHqqxi/ADYOEv6'
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Encode/Decode blueprint strings')
+    subparsers = parser.add_subparsers(dest='mode', required=True)
+
+    encode_parser = subparsers.add_parser('encode', help='Convert solver output into blueprint')
+    encode_parser.add_argument('--label', type=str, help='Label for created blueprint')
+    encode_parser.add_argument('--level', choices=list(BELT_TYPES), default='normal', help='Belt technology level to use')
+    
+    decode_parser = subparsers.add_parser('decode', help='Convert blueprint to solver output format')
+    #decode_parser.add_argument('format', choices=['simple', 'flow'], help='Format to encode to')
+
+    args = parser.parse_args()
+
+    if args.mode == 'encode':
+        while True:
+            tiles = np.array(json.loads(input()))
+            for i, row in enumerate(tiles):
+                for j, entry in enumerate(row):
+                    tiles[i, j] = read_tile(entry)
+            
+            print(encode_blueprint(make_blueprint(tiles, args.label, args.level)))
+
+    elif args.mode == 'decode':
+        while True:
+            decoded = decode_blueprint(input())
+            tiles = import_blueprint(decoded)
+
+            # if args.format == 'simple':
+            #     writer = write_tile_simple
+            # elif args.format == 'flow':
+            #     writer = write_tile_flow
+            # else:
+            #     assert False
+            writer = write_tile_simple
+            
+            for i, row in enumerate(tiles):
+                for j, tile in enumerate(row):
+                    tiles[i, j] = writer(tile)
+            print(json.dumps(tiles.tolist()))
+    else:
+        assert False
