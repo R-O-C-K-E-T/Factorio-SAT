@@ -1,3 +1,4 @@
+from collections import defaultdict
 import math, copy, argparse, json
 from os import path
 from numpy.lib.arraysetops import isin
@@ -62,103 +63,43 @@ def create_benes_network(size, prevent_limited_throughput=False):
 def plot(network, filename=None, engine='dot'):
     g = Digraph(engine=engine, node_attr={'shape': 'rect', 'height': '0.5', 'width': '0.3'}, graph_attr={'rankdir': 'LR'})
 
-    g.node('start', style='invis', height='3')
-    g.node('end', style='invis', height='3')
+    g.node('start', style='invis')
+    g.node('end', style='invis')
 
-    input_colours = {}
-    output_colours = {}
+    INPUT_SIDE = False
+    OUTPUT_SIDE = True
+
+    colour_occurences = defaultdict(set)
     for i, (inputs, outputs) in enumerate(network):
         for colour in inputs:
             if colour is None:
                 continue
-
-            assert colour not in input_colours
-            input_colours[colour] = i
+            colour_occurences[colour].add((OUTPUT_SIDE, i))
         for colour in outputs:
             if colour is None:
                 continue
+            colour_occurences[colour].add((INPUT_SIDE, i))
             
-            if colour in output_colours:
-                print()
-                print(i, colour, output_colours)
-
-            assert colour not in output_colours
-            output_colours[colour] = i
-    
     for i, _ in enumerate(network):
         g.node(str(i), label='')
 
-    for i, (inputs, outputs) in enumerate(network):
-        for colour in inputs:
-            if colour is None:
-                continue
-
-            if colour not in output_colours:
-                g.edge('start', str(i), label=str(colour))
-        
-        for colour in outputs:
-            if colour is None:
-                continue
-            if colour in input_colours:
-                g.edge(str(i), str(input_colours[colour]), label=str(colour))
-            else:
-                g.edge(str(i), 'end', label=str(colour))
-
-    if filename is None:
-        g.render('Network', format='png', view=True, cleanup=True)
-    else:
-        prefix, ext = path.splitext(filename)
-        g.render(prefix, format=ext[1:], view=False, cleanup=True)
-
-def plot2(network, filename=None, engine='dot'):
-    g = Digraph(engine=engine)
-
-    g.node('start', style='invis', shape='record', width='2')
-    g.node('end', style='invis', shape='record', width='2')
-
-    
-    input_colours = {}
-    output_colours = {}
-    for i, (inputs, outputs) in enumerate(network):
-        for side, colour in enumerate(inputs):
-            if colour is None:
-                continue
-
-            assert colour not in input_colours
-            input_colours[colour] = i, side
-        for colour in outputs:
-            if colour is None:
-                continue
-            
-            if colour in output_colours:
-                print()
-                print(i, colour, output_colours)
-
-            assert colour not in output_colours
-            output_colours[colour] = i
-    
-    for i, _ in enumerate(network):
-        g.node(str(i), '<f0>|<f1> ', shape='record')
-        #g.node(str(i), '<f0> | <f1>', shape='record')
-
-    for i, (inputs, outputs) in enumerate(network):
-        for side, colour in enumerate(inputs):
-            if colour is None:
-                continue
-
-            if colour not in output_colours:
-                g.edge('start::s', f'{i}:f{side}:n', label=str(colour))
-        
-        for side, colour in enumerate(outputs):
-            if colour is None:
-                continue
-            if colour in input_colours:
-                node, other_side = input_colours[colour]
-
-                g.edge(f'{i}:f{side}:s', f'{node}:f{other_side}:n', label=str(colour))
-            else:
-                g.edge(f'{i}:f{side}:s', 'end::n', label=str(colour))
-
+    for colour, occurences in colour_occurences.items():
+        output_count = sum(side == OUTPUT_SIDE for side, _ in occurences)
+        input_count = sum(side == INPUT_SIDE for side, _ in occurences)
+        if input_count == 1 and output_count == 1:
+            node_a, node_b = [colour for _, colour in sorted(occurences)]
+            g.edge(str(node_a), str(node_b), label=str(colour))
+        else:
+            gen_node = 'c{}'.format(colour)
+            g.node(gen_node, shape='none', margin='0.01', width='0', height='0', label=str(colour))
+            for side, node in occurences:
+                if side == INPUT_SIDE:
+                    if output_count != 0:
+                        g.edge(str(node), gen_node, arrowhead='none')
+                    else:
+                        g.edge(str(node), gen_node)
+                else: # Output side
+                    g.edge(gen_node, str(node))
     if filename is None:
         g.render('Network', format='png', view=True, cleanup=True)
     else:
@@ -314,6 +255,29 @@ def calculate_total_colours(network):
     
     return len(colours)
 
+def get_input_output_colours(network) -> Tuple[int, int]:
+    input_colours = set()
+    output_colours = set()
+
+    for inputs, outputs in network:
+        input_colours |= set(inputs)
+        output_colours |= set(outputs)
+
+    input_colours.discard(None)
+    output_colours.discard(None)
+
+    input_colours, output_colours = input_colours - output_colours, output_colours - input_colours
+
+    assert len(input_colours) == 1
+    assert len(output_colours) == 1
+    
+    return input_colours.pop(), output_colours.pop()
+
+def get_input_count(network, colour: int) -> int:
+    return sum(colour == in_colour for inputs, _ in network for in_colour in inputs)
+
+def get_output_count(network, colour: int) -> int:
+    return sum(colour == in_colour for _, outputs in network for in_colour in outputs)
 
 def get_exterior_colours(network):
     input_colours = set()
@@ -647,6 +611,22 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
                 node[-1].append(colour)
             node[-1] = tuple(node[-1])
         network.append(tuple(node))
+
+    network_input_colours, network_output_colours = get_exterior_colours(network)
+    mapping = {}
+    for colour in network_input_colours:
+        mapping[colour] = 0
+    current_colour = 1
+    for _, output_colours in network:
+        for colour in output_colours:
+            mapping[colour] = current_colour
+        current_colour += 1
+    for colour in network_output_colours:
+        mapping[colour] = current_colour
+    
+    mapping.pop(None, None)
+    network = remap_colours(network, mapping)
+
     return network
 
 def tidy_network(network):
@@ -673,9 +653,9 @@ if __name__ == '__main__':
     create_parser.add_argument('input_size', type=int, help='Input size for the balancer')
     create_parser.add_argument('output_size', type=int, help='Output size for the balancer')
 
-    optimise_parser = subparsers.add_parser('optimise', help='Optimises a network colour layout (not guaranteed to reduce solver times)')
-    optimise_parser.add_argument('input_network', type=argparse.FileType('r'), help='Input network destination')
-    optimise_parser.add_argument('output_network', type=argparse.FileType('w'), help='Output network destination')
+    #optimise_parser = subparsers.add_parser('optimise', help='Optimises a network colour layout (not guaranteed to reduce solver times)')
+    #optimise_parser.add_argument('input_network', type=argparse.FileType('r'), help='Input network destination')
+    #optimise_parser.add_argument('output_network', type=argparse.FileType('w'), help='Output network destination')
 
     flip_parser = subparsers.add_parser('flip', help='Flips a network around (e.g 3 to 4 network -> 4 to 3 network)')
     flip_parser.add_argument('input_network', type=argparse.FileType('r'), help='Input network destination')
@@ -692,32 +672,32 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if args.mode == 'create':
-        if args.input_size < 1:
-            raise RuntimeError('Input size too small')
-        if args.output_size < 1:
-            raise RuntimeError('Output size too small')
+    # if args.mode == 'create':
+    #     if args.input_size < 1:
+    #         raise RuntimeError('Input size too small')
+    #     if args.output_size < 1:
+    #         raise RuntimeError('Output size too small')
 
-        if args.input_size == 1 and args.output_size == 1:
-            raise RuntimeError('Invalid size')
+    #     if args.input_size == 1 and args.output_size == 1:
+    #         raise RuntimeError('Invalid size')
 
 
 
-        network = create_benes_network(max(args.input_size, args.output_size))
+    #     network = create_benes_network(max(args.input_size, args.output_size))
 
-        input_colours, _ = get_exterior_colours(network)
+    #     input_colours, _ = get_exterior_colours(network)
 
-        if args.input_size < args.output_size:
-            network = remap_colours(network, dict((colour, None) for _, colour in zip(range(args.output_size - args.input_size), input_colours)))
-        elif args.output_size < args.input_size:
-            network = remap_colours(network, dict((colour, None) for _, colour in zip(range(args.input_size - args.output_size), input_colours)))
-            network = flip_network(network)
+    #     if args.input_size < args.output_size:
+    #         network = remap_colours(network, dict((colour, None) for _, colour in zip(range(args.output_size - args.input_size), input_colours)))
+    #     elif args.output_size < args.input_size:
+    #         network = remap_colours(network, dict((colour, None) for _, colour in zip(range(args.input_size - args.output_size), input_colours)))
+    #         network = flip_network(network)
 
-        network = simplify(network)
+    #     network = simplify(network)
 
-        with args.network:
-            save_network(args.network, network)
-    elif args.mode == 'render':
+    #     with args.network:
+    #         save_network(args.network, network)
+    if args.mode == 'render':
         with args.network:
             network = open_network(args.network)
 
@@ -739,8 +719,8 @@ if __name__ == '__main__':
         
         if args.mode == 'flip':
             out_network = flip_network(in_network)
-        elif args.mode == 'optimise':
-            out_network = optimise_colours(in_network)
+        #elif args.mode == 'optimise':
+            #out_network = optimise_colours(in_network)
         else:
             assert False
 
