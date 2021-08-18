@@ -5,7 +5,7 @@ from functools import partial
 import numpy as np
 
 from util import EDGE_MODE_BLOCK
-from network import open_network, get_exterior_colours
+from network import open_network, get_input_output_colours
 import belt_balancer, blueprint
 
 MAXIMUM_UNDERGROUND_LENGTHS = {
@@ -104,8 +104,8 @@ class NetworkSolutionStore:
 
 
     def next_length_size(self, underground_length):
-        input_colours, output_colours = get_exterior_colours(self.network)
-        height = max(len(input_colours), len(output_colours))
+        (_, input_count), (_, output_count) = get_input_output_colours(self.network)
+        height = max(input_count, output_count)
 
         width = 3
         while True:
@@ -119,8 +119,8 @@ class NetworkSolutionStore:
             width += 1
 
     def next_area_size(self, underground_length):
-        input_colours, output_colours = get_exterior_colours(self.network)
-        min_height = max(len(input_colours), len(output_colours))
+        (_, input_count), (_, output_count) = get_input_output_colours(self.network)
+        min_height = max(input_count, output_count)
         area = min_height
         while True:
             for width, height in factors(area):

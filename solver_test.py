@@ -1,3 +1,4 @@
+from cardinality import quadratic_amo, quadratic_one
 from typing import *
 
 import numpy as np
@@ -40,12 +41,12 @@ class Grid(BaseGrid):
         for y in range(height):
             for x in range(width):
                 tile = self.get_tile_instance(x, y)
-                self.clauses += exactly_one_set(tile.type)
-                self.clauses += no_two_set(tile.input_direction)  # Have an input direction or nothing
-                self.clauses += no_two_set(tile.output_direction) # Have an output direction or nothing
-                self.clauses += no_two_set(tile.underground[0::2]) # Have a underground along -x, +x or nothing
-                self.clauses += no_two_set(tile.underground[1::2]) # Have a underground along -y, +y or nothing
-                self.clauses += no_two_set(tile.splitter_direction)
+                self.clauses += quadratic_one(tile.type)
+                self.clauses += quadratic_amo(tile.input_direction)  # Have an input direction or nothing
+                self.clauses += quadratic_amo(tile.output_direction) # Have an output direction or nothing
+                self.clauses += quadratic_amo(tile.underground[0::2]) # Have a underground along -x, +x or nothing
+                self.clauses += quadratic_amo(tile.underground[1::2]) # Have a underground along -y, +y or nothing
+                self.clauses += quadratic_amo(tile.splitter_direction)
 
                 self.clauses += implies([tile.is_empty], set_number(0, tile.all_direction))
 
@@ -61,7 +62,7 @@ class Grid(BaseGrid):
 
                 # Cannot output opposite of input
                 for direction in range(4):
-                    self.clauses += no_two_set([tile.input_direction[direction], tile.output_direction[(direction + 2) % 4]])
+                    self.clauses += quadratic_amo([tile.input_direction[direction], tile.output_direction[(direction + 2) % 4]])
 
                 # Colour is 0 iff there is no input/output
                 self.clauses += implies(invert_components(tile.input_direction),  set_number(0, tile.colour))

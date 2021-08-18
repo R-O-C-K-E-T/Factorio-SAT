@@ -1,4 +1,5 @@
 import argparse, json, math
+from cardinality import quadratic_amo, quadratic_one
 
 from fractions import Fraction
 from collections import Counter
@@ -211,7 +212,7 @@ if __name__ == '__main__':
     for x in range(grid.width):
         for y in range(grid.height):
             tile = grid.get_tile_instance(x, y)
-            grid.clauses += no_two_set(tile.assembler_type)
+            grid.clauses += quadratic_amo(tile.assembler_type)
             grid.clauses += implies([tile.assembling_x[0], tile.assembling_y[0]], [tile.assembler_type])
             grid.clauses += implies([-tile.assembling_x[0]], set_number(0, tile.assembler_type))
             grid.clauses += implies([-tile.assembling_y[0]], set_number(0, tile.assembler_type))
@@ -227,14 +228,14 @@ if __name__ == '__main__':
 
     for pos, variables in zip(edge_tiles, zip(*output_variables, *input_variables)):
         tile = grid.get_tile_instance(*pos)
-        grid.clauses += no_two_set(variables)
+        grid.clauses += quadratic_amo(variables)
         grid.clauses += implies([tile.is_empty], set_number(0, variables))
         grid.clauses += implies(invert_components(variables), [[tile.is_empty]])
 
 
     for (item, flow), variable_set in zip(raw_inputs.items(), input_variables):
         colour = colour_mapping[item]
-        grid.clauses += exactly_one_set(variable_set)
+        grid.clauses += quadratic_one(variable_set)
         for (x, y), var in zip(edge_tiles, variable_set):
             tile = grid.get_tile_instance(x, y)
             if x == 0:
@@ -259,7 +260,7 @@ if __name__ == '__main__':
 
     for (item, flow), variable_set in zip(products.items(), output_variables):
         colour = colour_mapping[item]
-        grid.clauses += exactly_one_set(variable_set)
+        grid.clauses += quadratic_one(variable_set)
         for (x, y), var in zip(edge_tiles, variable_set):
             tile = grid.get_tile_instance(x, y)
             if x == 0:

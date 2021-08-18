@@ -8,6 +8,7 @@ import numpy as np
 from pysat.solvers import Solver
 from pysat.formula import CNF
 
+
 #from pycryptosat import Solver as PyCryptoSolver
 
 
@@ -292,55 +293,6 @@ def direction_to_vec(direction: int) -> Tuple[int, int]:
 def bin_length(value: int):
     return math.ceil(math.log2(value))
 
-def no_two_set(variables: List[VariableType]) -> ClauseList:
-    clauses = []
-    for i, var_a in enumerate(variables):
-        for var_b in variables[:i]:
-            clauses.append([-var_a, -var_b])
-    return clauses
-
-def exactly_one_set(variables: List[VariableType]) -> ClauseList:
-    return no_two_set(variables) + [list(variables)]
-
-def exactly_one_set_using_location(variables, allocator: AllocatorType):
-    location_variables = [allocator() for _ in range(bin_length(len(variables)))]
-    clauses = [list(variables)]
-    for i, var in enumerate(variables):
-        clauses += implies([var], set_number(i, location_variables))
-    return clauses
-
-def exactly_one_set_using_tree(variables, allocator: AllocatorType):
-    def recurse(variables, output):
-        assert len(variables) > 1
-        clauses = []
-        if len(variables) <= 3:
-            clauses += no_two_set(variables)
-            if output is not None:
-                clauses += [[-var, output] for var in variables]
-        else:
-            sub_size = len(variables) // 2
-            
-            output_a = allocator()
-            output_b = allocator()
-
-            clauses += recurse(variables[:sub_size], output_a)
-            clauses += recurse(variables[sub_size:(2*sub_size)], output_b)
-            if len(variables) % 2 == 0:
-                clauses += recurse([output_a, output_b], output)
-            else:
-                clauses += recurse([output_a, output_b, variables[-1]], output)
-            
-        return clauses
-    return recurse(variables, None) + [variables]
-
-def no_three_set(variables: List[VariableType]) -> ClauseList:
-    clauses = []
-    for i, var_a in enumerate(variables):
-        for j, var_b in enumerate(variables[:i]):
-            for var_c in variables[:j]:
-                clauses.append([-var_a, -var_b, -var_c])
-    return clauses
-
 def set_variable(var: VariableType, value: bool) -> VariableType:
     if value:
         return var
@@ -443,6 +395,16 @@ def product(values):
     for value in values:
         result *= value
     return result
+
+T = TypeVar('T')
+def combinations(items: List[T], size: int) -> Generator[List[T], None, None]:
+    if size == 0:
+        yield []
+    if len(items) < size:
+        return
+    for i, item in enumerate(items):
+        for sub_combination in combinations(items[i+1:], size-1):
+            yield [item] + sub_combination
 
 class TileTemplate:
     def __init__(self, template: Dict[str, str]):
@@ -596,7 +558,7 @@ class TileTemplate:
                 if item_type[0] == 'one_hot':
                     entry = np.array(tile[name])
 
-                    #clauses += no_two_set()
+                    #clauses += quadratic_amo()
         return clauses
 
 def expand_edge_mode(edge_mode: EdgeModeType) -> Tuple[EdgeModeEnumType, EdgeModeEnumType]:

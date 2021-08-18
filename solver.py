@@ -1,3 +1,4 @@
+from cardinality import quadratic_amo
 from typing import *
 
 import numpy as np
@@ -29,12 +30,12 @@ class Grid(BaseGrid):
         for y in range(height):
             for x in range(width):
                 tile = self.get_tile_instance(x, y)
-                self.clauses += no_two_set(tile.input_direction)  # Have an input direction or nothing
-                self.clauses += no_two_set(tile.output_direction) # Have an output direction or nothing
-                self.clauses += no_two_set(tile.is_splitter)      # Have a splitter type or nothing
+                self.clauses += quadratic_amo(tile.input_direction)  # Have an input direction or nothing
+                self.clauses += quadratic_amo(tile.output_direction) # Have an output direction or nothing
+                self.clauses += quadratic_amo(tile.is_splitter)      # Have a splitter type or nothing
 
-                self.clauses += no_two_set(tile.underground[0::2]) # Have a underground along -x, +x or nothing
-                self.clauses += no_two_set(tile.underground[1::2]) # Have a underground along -y, +y or nothing
+                self.clauses += quadratic_amo(tile.underground[0::2]) # Have a underground along -x, +x or nothing
+                self.clauses += quadratic_amo(tile.underground[1::2]) # Have a underground along -y, +y or nothing
 
                 # If the tile is a splitter, then it is not empty
                 self.clauses += implies([tile.is_splitter[0]], [tile.all_direction])
@@ -54,7 +55,7 @@ class Grid(BaseGrid):
 
                 for direction in range(4):
                     # Cannot input from same side as output
-                    self.clauses += no_two_set([tile.input_direction[direction], tile.output_direction[(direction + 2) % 4]])
+                    self.clauses += quadratic_amo([tile.input_direction[direction], tile.output_direction[(direction + 2) % 4]])
 
                     # Cannot have a turn and be a splitter
                     for splitter in tile.is_splitter:

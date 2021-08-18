@@ -255,29 +255,31 @@ def calculate_total_colours(network):
     
     return len(colours)
 
-def get_input_output_colours(network) -> Tuple[int, int]:
-    input_colours = set()
-    output_colours = set()
-
+def get_input_output_colours(network) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    occurences = defaultdict(lambda: 0)
     for inputs, outputs in network:
-        input_colours |= set(inputs)
-        output_colours |= set(outputs)
+        for input in inputs:
+            occurences[input] += 1
+        for output in outputs:
+            occurences[output] -= 1
 
-    input_colours.discard(None)
-    output_colours.discard(None)
+    occurences.pop(None, None)
 
-    input_colours, output_colours = input_colours - output_colours, output_colours - input_colours
+    input = None
+    output = None
 
-    assert len(input_colours) == 1
-    assert len(output_colours) == 1
+    for colour, count in occurences.items():
+        if count > 0:
+            assert input is None
+            input = colour, count
+        elif count < 0:
+            assert output is None
+            output = colour, -count
+
+    assert input is not None
+    assert output is not None
     
-    return input_colours.pop(), output_colours.pop()
-
-def get_input_count(network, colour: int) -> int:
-    return sum(colour == in_colour for inputs, _ in network for in_colour in inputs)
-
-def get_output_count(network, colour: int) -> int:
-    return sum(colour == in_colour for _, outputs in network for in_colour in outputs)
+    return input, output
 
 def get_exterior_colours(network):
     input_colours = set()

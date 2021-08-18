@@ -1,9 +1,10 @@
+from cardinality import adder_greater_equal, logarithmic_one, naive_greater_equal, quadratic_one
 import time, argparse, json
 import numpy as np
 
 from solver import Grid, Belt
 from util import *
-from network import get_exterior_colours, get_input_count, get_input_output_colours, get_output_count, open_network
+from network import get_input_output_colours, open_network
 
 
 def set_numbers(value_a: int, value_b: int, variables_a: List[VariableType], variables_b: List[VariableType]) -> ClauseList:
@@ -38,49 +39,33 @@ def set_numbers(value_a: int, value_b: int, variables_a: List[VariableType], var
 
 
 def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offset: int):
-    input_colours, output_colours = get_exterior_colours(network)
+    (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network)
 
-    assert start_offset + len(input_colours) <= grid.height and end_offset + len(output_colours) <= grid.height
+    assert start_offset + input_count <= grid.height and end_offset + output_count <= grid.height
 
     for y in range(start_offset):
         grid.set_tile(0, y, None)
 
-    for y in range(start_offset, start_offset + len(input_colours)):
+    for y in range(start_offset, start_offset + input_count):
         grid.set_tile(0, y, Belt(0, 0))
+        grid.set_colour(grid.width-1, y, input_colour)
     
-    for y in range(start_offset+len(input_colours), grid.height):
+    for y in range(start_offset+input_count, grid.height):
         grid.set_tile(0, y, None)
     
 
     for y in range(end_offset):
         grid.set_tile(grid.width-1, y, None)
 
-    for y in range(end_offset, end_offset + len(output_colours)):
+    for y in range(end_offset, end_offset + output_count):
         grid.set_tile(grid.width-1, y, Belt(0, 0))
+        grid.set_colour(grid.width-1, y, output_colour)
 
-    for y in range(end_offset+len(output_colours), grid.height):
+    for y in range(end_offset+output_count, grid.height):
         grid.set_tile(grid.width-1, y, None)
 
-    for colour in input_colours:
-        variables = []
-        for tile in [grid.get_tile_instance(0, y) for y in range(start_offset, start_offset + len(input_colours))]:
-            variable = grid.allocate_variable()
-            grid.clauses += implies([variable], set_number(colour, tile.colour))
-            variables.append(variable)
-        grid.clauses.append(variables)
-
-    for colour in output_colours:
-        variables = []
-        for tile in [grid.get_tile_instance(grid.width - 1, y) for y in range(end_offset, end_offset + len(output_colours))]:
-            variable = grid.allocate_variable()
-            grid.clauses += implies([variable], set_number(colour, tile.colour))
-            variables.append(variable)
-        grid.clauses.append(variables)
-
 def setup_balancer_ends(grid: Grid, network, aligned: bool):
-    input_colour, output_colour = get_input_output_colours(network)
-    input_count = get_input_count(network, input_colour)
-    output_count = get_output_count(network, output_colour)
+    (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network)
 
     start_offsets = [grid.allocate_variable() for _ in range(grid.height - input_count)]
     end_offsets   = [grid.allocate_variable() for _ in range(grid.height - output_count)]
@@ -92,7 +77,7 @@ def setup_balancer_ends(grid: Grid, network, aligned: bool):
                 grid.clauses += [[tile.input_direction[0]], [tile.output_direction[0]], [-tile.is_splitter[0]], [-tile.is_splitter[1]]]
                 grid.clauses += set_number(colour, tile.colour)
         else:
-            grid.clauses += exactly_one_set(offsets)
+            grid.clauses += quadratic_one(offsets)
             for dy, variable in enumerate(offsets):
                 consequences = []
                 for y in range(grid.height):
@@ -115,49 +100,33 @@ def setup_balancer_ends(grid: Grid, network, aligned: bool):
 def create_balancer(network, width: int, height: int) -> Grid:
     assert width > 0 and height > 0
 
-    network_input_colours = set()
-    network_output_colours = set()
-
+    all_colours = set()
     for input_colours, output_colours in network:
-        network_input_colours.update(input_colours)
-        network_output_colours.update(output_colours)
-    
-    network_input_colours.discard(None)
-    network_output_colours.discard(None)
-
-    all_colours = network_input_colours | network_output_colours
-    network_input_colours, network_output_colours = network_input_colours - network_output_colours, network_output_colours - network_input_colours
+        for colour in input_colours + output_colours:
+            all_colours.add(colour)
+    all_colours.discard(None)
 
     grid = Grid(width, height, max(all_colours) + 1, TileTemplate({'node': 'one_hot ' + str(len(network))}))
-
-
     for colour in range(max(all_colours) + 1):
         if colour in all_colours:
             continue
         grid.prevent_colour(colour)
     
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
-
     grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
     grid.prevent_bad_colouring(EDGE_MODE_BLOCK)
 
     # There is exactly one splitter of each type
     for i in range(len(network)):
         variables = [grid.get_tile_instance(x, y).node[i] for x in range(grid.width) for y in range(grid.height)]
-        grid.clauses += exactly_one_set_using_location(variables, grid.allocate_variable)
-        #grid.clauses += exactly_one_set_using_tree(variables, grid.allocate_variable)
-        #grid.clauses += exactly_one_set(variables)
+        grid.clauses += logarithmic_one(variables, grid.allocate_variable)
 
     # Each splitter has one type
     for x in range(grid.width):
         for y in range(grid.height):
             tile = grid.get_tile_instance(x, y)
-            #grid.clauses += no_two_set(tile.node)
-            #grid.clauses.append([*tile.node, -tile.is_splitter[0]])
 
-            grid.clauses += exactly_one_set([-tile.is_splitter[0], *tile.node])
-            #grid.clauses += exactly_one_set_using_location([-tile.is_splitter[0], *tile.node], grid.allocate_variable)
-            #grid.clauses += exactly_one_set_using_tree([-tile.is_splitter[0], *tile.node], grid.allocate_variable)
+            grid.clauses += quadratic_one([-tile.is_splitter[0], *tile.node])
 
     for i, (input_colours, output_colours) in enumerate(network):
         assert sum(colour is None for colour in input_colours + output_colours) <= 1
@@ -169,6 +138,7 @@ def create_balancer(network, width: int, height: int) -> Grid:
                 #grid.clauses.append([tile00.is_splitter[0], -tile00.node[i]])
 
                 if any(colour is None for colour in input_colours):
+                    assert not any(colour is None for colour in output_colours)
                     grid.clauses.append([-tile00.node[i], *tile00.output_direction])
                 else:
                     grid.clauses.append([-tile00.node[i], *tile00.input_direction])
@@ -220,25 +190,53 @@ def create_balancer(network, width: int, height: int) -> Grid:
                     else:
                         grid.clauses += implies(precondition, [[tile00.output_direction[direction]], [tile01.output_direction[direction]]])
                         grid.clauses += implies(precondition, set_numbers(*output_colours, tile10.colour, tile11.colour))
-    # exit()
     return grid
 
 def enforce_edge_splitters(grid: Grid, network):
-    network_input_colours, network_output_colours = get_exterior_colours(network)
+    # Any optimal balancer must have a balancer the same size that has both inputs/outputs connected directly to the overall input/outputs (I think)
+    (network_input_colour, _), (network_output_colour, _) = get_input_output_colours(network)
 
-    # Any optimal splitter must have a splitter the same size that has both inputs/outputs connected directly to the overall input/outputs (I think)
-    for i, (node_input_colours, node_output_colours) in enumerate(network):
-        if all(colour in network_input_colours for colour in node_input_colours):
+    recirculate_input = 0
+    recirculate_output = 0
+    for inputs, outputs in network:
+        for colour in inputs:
+            if colour == network_output_colour:
+                recirculate_output += 1
+        for colour in outputs:
+            if colour == network_input_colour:
+                recirculate_input += 1
+
+    input_splitters = [i for i, (input_colours, _) in enumerate(network) if all(colour == network_input_colour for colour in input_colours)]
+    if recirculate_input == 0:
+        for i in input_splitters:
             grid.clauses.append([grid.get_tile_instance(1, y).node[i] for y in range(grid.height)])
             for y in range(grid.height):
                 tile = grid.get_tile_instance(1, y)
-                grid.clauses.append([-tile.node[i], tile.input_direction[0], tile.output_direction[0]])
-        
-        elif all(colour in network_output_colours for colour in node_output_colours):
+                grid.clauses += implies([tile.node[i]], [[tile.input_direction[0]], [tile.output_direction[0]]])
+    else:
+        edge_splitter_min = len(input_splitters) - recirculate_input
+        if edge_splitter_min > 0:
+            variables = [grid.allocate_variable() for _ in input_splitters]
+            for i, variable in zip(input_splitters, variables):
+                grid.clauses += implies([variable], [[grid.get_tile_instance(1, y).node[i] for y in range(grid.height)]])
+            # grid.clauses += naive_greater_equal(variables, edge_splitter_min)
+            grid.clauses += adder_greater_equal(variables, edge_splitter_min, grid.allocate_variable)
+
+    output_splitters = [i for i, (_, output_colours) in enumerate(network) if all(colour == network_output_colour for colour in output_colours)]
+    if recirculate_output == 0:
+        for i in output_splitters:
             grid.clauses.append([grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height)])
             for y in range(grid.height):
                 tile = grid.get_tile_instance(grid.width - 2, y)
-                grid.clauses.append([-tile.node[i], tile.input_direction[0], tile.output_direction[0]]) 
+                grid.clauses += implies([tile.node[i]], [[tile.input_direction[0]], [tile.output_direction[0]]])
+    else:
+        edge_splitter_min = len(output_splitters) - recirculate_output
+        if edge_splitter_min > 0:
+            variables = [grid.allocate_variable() for _ in output_splitters]
+            for i, variable in zip(output_splitters, variables):
+                grid.clauses += implies([variable], [[grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height)]])
+            # grid.clauses += naive_greater_equal(variables, edge_splitter_min)            
+            grid.clauses += adder_greater_equal(variables, edge_splitter_min, grid.allocate_variable)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
@@ -266,8 +264,8 @@ if __name__ == '__main__':
 
     setup_balancer_ends(grid, network, args.aligned)
 
-    for clause in grid.clauses:
-        print(clause, sep=' ')
+    # for clause in grid.clauses:
+    #     print(clause, sep=' ')
 
     for solution in grid.itersolve(True, args.solver):
         print(json.dumps(solution.tolist()))

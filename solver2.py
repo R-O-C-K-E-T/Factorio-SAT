@@ -1,3 +1,4 @@
+from cardinality import quadratic_amo, quadratic_one
 from typing import *
 
 import numpy as np
@@ -55,16 +56,16 @@ class Grid(BaseGrid):
             for y0 in range(self.height):
                 tile = self.get_tile_instance(x0, y0)
 
-                self.clauses += exactly_one_set(tile.type)
+                self.clauses += quadratic_one(tile.type)
 
-                self.clauses += no_two_set(tile.input_direction)
-                self.clauses += no_two_set(tile.output_direction)
-                self.clauses += no_two_set(tile.underground[0::2])
-                self.clauses += no_two_set(tile.underground[1::2])
-                self.clauses += no_two_set(tile.assembling_x)
-                self.clauses += no_two_set(tile.assembling_y)
-                self.clauses += no_two_set(tile.colour_direction)
-                self.clauses += no_two_set(tile.inserter_direction)
+                self.clauses += quadratic_amo(tile.input_direction)
+                self.clauses += quadratic_amo(tile.output_direction)
+                self.clauses += quadratic_amo(tile.underground[0::2])
+                self.clauses += quadratic_amo(tile.underground[1::2])
+                self.clauses += quadratic_amo(tile.assembling_x)
+                self.clauses += quadratic_amo(tile.assembling_y)
+                self.clauses += quadratic_amo(tile.colour_direction)
+                self.clauses += quadratic_amo(tile.inserter_direction)
 
                 self.clauses += implies([tile.is_empty], set_number(0, tile.all_direction + tile.flow_out[0] + tile.flow_out[1] + tile.colour[0] + tile.colour[1]))
                 self.clauses += implies([tile.is_belt], [tile.all_direction, tile.colour_direction])
@@ -109,7 +110,7 @@ class Grid(BaseGrid):
 
                 # Cannot output opposite of input
                 for direction in range(4):
-                    self.clauses += no_two_set([tile.input_direction[direction], tile.output_direction[(direction + 2) % 4]])
+                    self.clauses += quadratic_amo([tile.input_direction[direction], tile.output_direction[(direction + 2) % 4]])
 
                 for direction in range(4):
                     self.clauses += implies([tile.output_direction[direction]], [[tile.colour_direction[direction]]])
