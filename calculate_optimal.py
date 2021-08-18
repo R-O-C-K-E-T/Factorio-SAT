@@ -55,7 +55,7 @@ class NetworkSolutionStore:
         self.network_name = os.path.split(network_path)[1]
 
         self.exist = dict()
-        self.optimal = dict()
+        self.solutions = dict()
 
     def does_balancer_exist(self, size):
         for other_size, exist in self.exist.items():
@@ -78,30 +78,28 @@ class NetworkSolutionStore:
 
     def from_json(self, data):
         self.exist = {}
-        for key, val in data['exist'].items():
+        for key, val in data.get('exist', {}).items():
             underground_length, width, height = map(int, key.split(','))
             self.exist[underground_length, width, height] = val
         
-        self.optimal = {}
-        for key, val in data['optimal'].items():
-            underground_length, mode = key.split(',')
-            self.optimal[int(underground_length), mode] = val
+        self.solutions = {}
+        for key, val in data.get('solutions', {}).items():
+            underground_length, width, height = map(int, key.split(','))
+            self.solutions[underground_length, width, height] = val
 
     def to_json(self):
         return {
             'exist': dict((','.join(map(str, key)), val) for key, val in self.exist.items()),
-            'optimal': dict((','.join(map(str, key)), val) for key, val in self.optimal.items())
+            'solutions': dict((','.join(map(str, key)), val) for key, val in self.solutions.items())
         }
 
-    def add_solution(self, size, solution, optimiser_mode=None):
+    def add_solution(self, size, solution):
         self.exist[size] = solution is not None
+        if solution is not None:
+            self.solutions[size] = solution
 
-        if solution is not None and optimiser_mode is not None:
-            self.optimal[size[0], optimiser_mode] = solution
-
-    def best_current_solution(self, loss):
-        return min((size for size, exist in self.exist.items() if exist), key=loss, default=None)
-
+    def best_current_solution(self, loss, underground_length):
+        return min(((size, solution) for size, solution in self.solutions.items() if size[0] <= underground_length and loss(size[1:]) != float('inf')), key=lambda v: loss(v[0][1:]), default=[None]*2)[1]
 
     def next_length_size(self, underground_length):
         (_, input_count), (_, output_count) = get_input_output_colours(self.network)
@@ -150,6 +148,7 @@ if __name__ == '__main__':
     parser.add_argument('underground_length', type=int, help='Maximum underground length')
     parser.add_argument('objective', choices=['area', 'length'], help='Optimisation objective')
     parser.add_argument('--export-blueprints', action='store_true', help='Return query results as blueprints')
+    parser.add_argument('--threads', type=int, help='Number of compute threads')
     args = parser.parse_args()
 
     stores = []
@@ -174,37 +173,6 @@ if __name__ == '__main__':
         with open(result_file, 'w') as f:
             json.dump(data, f)
 
-    if False:
-        import numpy as np
-        length = 4
-        for store in stores:
-            if (length, 'area') in store.optimal:
-                continue
-            if store.next_area_size(length) is not None:
-                continue
-
-            best_area = float('inf')
-            for size, exist in store.exist.items():
-                underground_length, width, height = size
-                if underground_length > length:
-                    continue
-                if exist != True:
-                    continue
-                area = (width - 2) * height
-                best_area = min(best_area, area)
-            assert best_area != float('inf')
-
-            for (underground_length, _), solution in store.optimal.items():
-                if underground_length > length:
-                    continue
-
-                width, height = np.array(solution).shape
-                area = (width - 2) * height
-                if area == best_area:
-                    store.optimal[length, 'area'] = solution
-                    break
-        save_progress()
-        exit()
     if args.mode == 'query':
         if args.export_blueprints:
             def encode_solution(solution, name):
@@ -217,10 +185,30 @@ if __name__ == '__main__':
         else:
             encode_solution = lambda solution, _: json.dumps(solution)
 
-        for store in sorted(stores, key=lambda store: store.network_name.split('x')):
-            solution = store.optimal.get((args.underground_length, args.objective), None)
-            if solution is not None:
-                print(encode_solution(solution, store.network_name))
+        if args.objective == 'length':
+            get_next_size = store.next_length_size
+        elif args.objective == 'area':
+            get_next_size = store.next_area_size
+        
+        
+        for store in sorted(stores, key=lambda store: [int(s) for s in store.network_name.split('x')]):
+            if get_next_size(args.underground_length) is not None:
+                continue
+
+            if args.objective == 'length':
+                (_, input_count), (_, output_count) = get_input_output_colours(store.network)
+                min_height = max(input_count, output_count)
+                loss = lambda size: size[0] if size[1] == min_height else float('inf')
+            elif args.objective == 'area':
+                loss = lambda size: (size[0]-2) * size[1]
+            else:
+                assert False
+            
+            solution = store.best_current_solution(loss, args.underground_length)
+            if solution is None:
+                continue
+
+            print(encode_solution(solution, store.network_name))
     elif args.mode == 'compute':
         async def optimise(executor, store):
             next_size = None
@@ -237,7 +225,7 @@ if __name__ == '__main__':
                 print(f'{store.network_name}: Start {next_size}')
                 solution = await loop.run_in_executor(executor, solve_balancer, store.network, next_size, 'g4')
 
-                store.add_solution(next_size, solution, args.objective)
+                store.add_solution(next_size, solution)
                 store.clean()
 
                 save_progress()
@@ -245,7 +233,7 @@ if __name__ == '__main__':
             print(f'{store.network_name}: Solution found')
 
         async def main():
-            with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads) as executor:
                 tasks = [optimise(executor, store) for store in stores]
                 await asyncio.gather(*tasks)
 
