@@ -122,7 +122,7 @@ class NetworkSolutionStore:
         area = min_height
         while True:
             for width, height in factors(area):
-                if height < min_height or height > 20:
+                if height < min_height or height > 2*min_height:
                     continue
 
                 size = underground_length, width + 2, height
