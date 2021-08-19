@@ -212,7 +212,7 @@ def enforce_edge_splitters(grid: Grid, network):
             grid.clauses.append([grid.get_tile_instance(1, y).node[i] for y in range(grid.height)])
             for y in range(grid.height):
                 tile = grid.get_tile_instance(1, y)
-                grid.clauses += implies([tile.node[i]], [[tile.input_direction[0]], [tile.output_direction[0]]])
+                grid.clauses += implies([tile.node[i]], [[tile.input_direction[0], tile.output_direction[0]]])
     else:
         edge_splitter_min = len(input_splitters) - recirculate_input
         if edge_splitter_min > 0:
@@ -228,7 +228,7 @@ def enforce_edge_splitters(grid: Grid, network):
             grid.clauses.append([grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height)])
             for y in range(grid.height):
                 tile = grid.get_tile_instance(grid.width - 2, y)
-                grid.clauses += implies([tile.node[i]], [[tile.input_direction[0]], [tile.output_direction[0]]])
+                grid.clauses += implies([tile.node[i]], [[tile.input_direction[0], tile.output_direction[0]]])
     else:
         edge_splitter_min = len(output_splitters) - recirculate_output
         if edge_splitter_min > 0:
