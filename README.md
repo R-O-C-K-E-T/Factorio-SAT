@@ -1,5 +1,5 @@
 # Factorio SAT
-Enhancing the factorio experience with SAT solvers.
+Enhancing the Factorio experience with SAT solvers.
 
 ![](/pictures/diagram.png)
 
