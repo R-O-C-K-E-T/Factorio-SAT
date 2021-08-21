@@ -50,6 +50,8 @@ python fetch.py /path/to/factorio/install
 | make_block.py        | Generate random blocks of belts        |
 | calculate_optimal.py | Find optimal balancers                 |
 | rotate.py            | Rotate a balancer 90 degrees           |
+| stringifier.py       | Convert balancers to and from text     |
+| test_runner.py       | Run the test suite                     |
 
 ## Controls (render.py)
 | Key | Usage                          |
