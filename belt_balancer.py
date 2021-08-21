@@ -112,7 +112,6 @@ def create_balancer(network, width: int, height: int) -> Grid:
             continue
         grid.prevent_colour(colour)
     
-    grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
     grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
     grid.prevent_bad_colouring(EDGE_MODE_BLOCK)
 
@@ -254,6 +253,7 @@ if __name__ == '__main__':
     args.network.close()
 
     grid = create_balancer(network, args.width, args.height)
+    grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
 
     if args.edge_splitters:
         enforce_edge_splitters(grid, network)

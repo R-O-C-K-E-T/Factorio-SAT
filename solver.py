@@ -183,8 +183,8 @@ class Grid(BaseGrid):
                     self.clauses += implies([tile_a.underground[direction]], set_numbers_equal(colour_a, colour_b))
 
                     # Underground transition consistent
-                    self.clauses += implies([tile_a.input_direction[direction], *invert_components(tile_a.output_direction)], set_numbers_equal(tile_a.colour, colour_b))
-                    self.clauses += implies([tile_b.output_direction[direction], *invert_components(tile_b.input_direction)], set_numbers_equal(colour_a, tile_b.colour))
+                    self.clauses += implies([tile_a.input_direction[direction], *invert_components(tile_a.output_direction + tile_a.is_splitter)], set_numbers_equal(tile_a.colour, colour_b))
+                    self.clauses += implies([tile_b.output_direction[direction], *invert_components(tile_b.input_direction + tile_b.is_splitter)], set_numbers_equal(colour_a, tile_b.colour))
     
     def prevent_bad_undergrounding(self, edge_mode: EdgeModeType):
         for direction in range(4):
