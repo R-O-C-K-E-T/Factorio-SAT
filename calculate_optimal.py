@@ -4,7 +4,7 @@ import concurrent.futures
 from functools import partial
 import numpy as np
 
-from util import EDGE_MODE_BLOCK
+from util import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
 from network import open_network, get_input_output_colours
 import belt_balancer, blueprint
 
@@ -38,6 +38,7 @@ def solve_balancer(network, size, solver):
     maximum_underground_length, width, height = size
 
     grid = belt_balancer.create_balancer(network, width, height)
+    grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
     belt_balancer.setup_balancer_ends(grid, network, True)
     belt_balancer.enforce_edge_splitters(grid, network)
     grid.set_maximum_underground_length(maximum_underground_length, EDGE_MODE_BLOCK)
