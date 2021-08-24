@@ -150,6 +150,7 @@ if __name__ == '__main__':
     parser.add_argument('objective', choices=['area', 'length'], help='Optimisation objective')
     parser.add_argument('--export-blueprints', action='store_true', help='Return query results as blueprints')
     parser.add_argument('--threads', type=int, help='Number of compute threads')
+    parser.add_argument('--solver', type=str, default='g4', help='Backend SAT solver to use')
     args = parser.parse_args()
 
     stores = []
@@ -224,7 +225,7 @@ if __name__ == '__main__':
                 if next_size is None:
                     break
                 print(f'{store.network_name}: Start {next_size}')
-                solution = await loop.run_in_executor(executor, solve_balancer, store.network, next_size, 'g4')
+                solution = await loop.run_in_executor(executor, solve_balancer, store.network, next_size, args.solver)
 
                 store.add_solution(next_size, solution)
                 store.clean()

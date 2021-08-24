@@ -1,12 +1,14 @@
 from typing import *
 
-import traceback, math, collections
+import traceback, math, collections, subprocess, shlex, io
 from os.path import basename
 
 import numpy as np
 
 from pysat.solvers import Solver
 from pysat.formula import CNF
+
+from ipasir import IPASIRLibrary
 
 
 #from pycryptosat import Solver as PyCryptoSolver
@@ -567,6 +569,36 @@ def expand_edge_mode(edge_mode: EdgeModeType) -> Tuple[EdgeModeEnumType, EdgeMod
     else:
         return edge_mode
 
+def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[VariableType]]:
+    formula = CNF(from_clauses=clauses)
+
+    with subprocess.Popen(shlex.split(cmd), stdin=subprocess.PIPE, stdout=subprocess.PIPE) as process:
+        formula.to_fp(io.TextIOWrapper(process.stdin))
+        result = io.TextIOWrapper(process.stdout)
+
+        while True:
+            line = result.readline()
+            if line.startswith('s'):
+                break
+        
+        if line.startswith('s UNSATISFIABLE'):
+            return None
+        
+        if not line.startswith('s SATISFIABLE'):
+            raise RuntimeError('Unknown solution status: ' + line)
+        
+        model = []
+        while True:
+            line = result.readline()
+            variables = line.split(' ')
+            if variables[0] != 'v':
+                raise RuntimeError('Solution not returned correctly: ' + line)
+            model += [int(v) for v in variables[1:]]
+            if model[-1] == 0:
+                model.pop()
+                break
+        return model
+
 class BaseGrid:
     def __init__(self, template: TileTemplate, width: int, height: int):
         assert width > 0 and height > 0
@@ -633,27 +665,55 @@ class BaseGrid:
                 variables[item-1] = True
         return np.array(self.template.parse(variables)).reshape((self.height, self.width)).T    
 
-    def check(self, solver='g3'):
-        with Solver(name=solver, bootstrap_with=self.clauses) as s:
-            return s.solve()
-    
-    def solve(self, solver='g3'):
+    def check(self, solver: str='g3'):
         if solver == 'cryptosat':
             s = PyCryptoSolver()
+            satisfiable, _ = s.solve()
+            return satisfiable
+        elif solver.startswith('cmd:'):
+            solution = run_command_solver(solver[4:], self.clauses)
+            if solution is None:
+                return None
+            return self.parse_solution(solution)
+        else:
+            if solver.startswith('lib:'):
+                s = IPASIRLibrary(solver[4:]).create_solver()
+                s.add_clauses(self.clauses)
+            else:
+                s = Solver(name=solver, bootstrap_with=self.clauses)
+            
+            with s:
+                return s.solve()
+    
+    def solve(self, solver: str='g3'):
+        if solver == 'cryptosat':
+            s = PyCryptoSolver()
+            s.add_clauses(self.clauses)
             satisfiable, solution = s.solve()
             if not satisfiable:
                 return None
             
             variables = solution[1:(self.total_variables + 1)]
             return np.array(self.template.parse(variables)).reshape((self.height, self.width)).T    
+        elif solver.startswith('cmd:'):
+            solution = run_command_solver(solver[4:], self.clauses)
+            if solution is None:
+                return None
+            return self.parse_solution(solution)
         else:
-            with Solver(name=solver, bootstrap_with=self.clauses) as s:
+            if solver.startswith('lib:'):
+                s = IPASIRLibrary(solver[4:]).create_solver()
+                s.add_clauses(self.clauses)
+            else:
+                s = Solver(name=solver, bootstrap_with=self.clauses)
+            
+            with s:
                 if s.solve():
                     return self.parse_solution(s.get_model())
                 else:
                     return None
 
-    def itersolve(self, important_variables=set(), solver='g3'):
+    def itersolve(self, important_variables=set(), solver: str='g3'):
         if solver == 'cryptosat':
             s = PyCryptoSolver()
             s.add_clauses(self.clauses)
@@ -666,9 +726,19 @@ class BaseGrid:
                 yield np.array(self.template.parse(variables)).reshape((self.height, self.width)).T    
 
                 s.add_clause([set_variable(var, not solution[var]) for var in important_variables])
+        elif solver.startswith('cmd:'):
+            solution = run_command_solver(solver[4:], self.clauses)
+            if solution is None:
+                return
+            yield self.parse_solution(solution)
         else:
-
-            with Solver(name=solver, bootstrap_with=self.clauses) as s:
+            if solver.startswith('lib:'):
+                s = IPASIRLibrary(solver[4:]).create_solver()
+                s.add_clauses(self.clauses)
+            else:
+                s = Solver(name=solver, bootstrap_with=self.clauses)
+            
+            with s:
                 while s.solve():
                     solution = s.get_model()
                     yield self.parse_solution(solution)
