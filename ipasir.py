@@ -60,14 +60,14 @@ class IPASIRSolver:
 
     def add_clauses(self, clauses):
         self.check_closed()
-        lib = self.lib
+        ipasir_add = self.lib.ipasir_add
         solver_p = self.solver_p
-        variables = self.variables
+        add_var = self.variables.add
         for clause in clauses:
             for lit in clause:
-                variables.add(abs(lit))
-                lib.ipasir_add(solver_p, lit)
-            lib.ipasir_add(solver_p, 0)
+                add_var(abs(lit))
+                ipasir_add(solver_p, lit)
+            ipasir_add(solver_p, 0)
     
     def assume(self, lit):
         self.check_closed()
@@ -101,6 +101,7 @@ class IPASIRSolver:
         return bool(self.lib.ipasir_failed(self.solver_p, lit))
     
     def __enter__(self):
+        self.check_closed()
         return self
 
     def __exit__(self, *_):
