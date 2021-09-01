@@ -466,16 +466,16 @@ def render_attributes(solution, names):
 
 
 
-def render_grid(width, height):
+def render_grid(start_x, stop_x, start_y, stop_y):
     glBegin(GL_LINES)
             
-    for x in range(1, width):
-        glVertex2f(x, 0)
-        glVertex2f(x, height)
+    for x in range(math.floor(start_x), math.ceil(stop_x)):
+        glVertex2f(x, start_y)
+        glVertex2f(x, stop_y)
                 
-    for y in range(1, height):
-        glVertex2f(0, y)
-        glVertex2f(width, y)
+    for y in range(math.floor(start_y), math.ceil(stop_y)):
+        glVertex2f(start_x, y)
+        glVertex2f(stop_x, y)
     glEnd()
 
 
@@ -599,10 +599,15 @@ if __name__ == '__main__':
     parser.add_argument('--cell-size', type=int, default=32, help='Size of the grid cells (pixels)')
     parser.add_argument('--export-all', action='store_true', help='Renders all grids to videos then exits')
     parser.add_argument('--export-format', choices=['gif', 'video'], default='video', help='Format to export animations as')
+    parser.add_argument('--padding', type=float, default=0, help='Amount of padding tiles around edges of grid')
     args = parser.parse_args()
 
     if args.cell_size <= 0:
         raise RuntimeError('Cell size must be greater than 0')
+
+    padding_pixels = round(2 * args.padding * args.cell_size)
+    def grid_size(solution):
+        return max(solution.shape[0] * args.cell_size + padding_pixels, 1), max(solution.shape[1] * args.cell_size  + padding_pixels, 1)
 
     def increment_solution(amount):
         global index, framebuffers, input_closed
@@ -617,8 +622,9 @@ if __name__ == '__main__':
                 input_closed = True
         
         index = index % len(solutions)
-        pygame.display.set_mode((max(solutions[index].shape[0] * GRID_CELL_SIZE, 1), max(solutions[index].shape[1] * GRID_CELL_SIZE, 1)), OPENGL|DOUBLEBUF)
-        glViewport(0, 0, solutions[index].shape[0] * GRID_CELL_SIZE, solutions[index].shape[1] * GRID_CELL_SIZE)
+        size = grid_size(solutions[index])
+        pygame.display.set_mode(size, OPENGL|DOUBLEBUF)
+        glViewport(0, 0, *size)
 
         glDeleteFramebuffers(len(framebuffers), list(framebuffers.values()))
         framebuffers = {}
@@ -645,8 +651,7 @@ if __name__ == '__main__':
         pygame.display.gl_set_attribute(GL_MULTISAMPLEBUFFERS, 1)
         pygame.display.gl_set_attribute(GL_MULTISAMPLESAMPLES, multisamples)'''
 
-    GRID_CELL_SIZE = args.cell_size
-    pygame.display.set_mode((max(solutions[-1].shape[0] * GRID_CELL_SIZE, 1), max(solutions[-1].shape[1] * GRID_CELL_SIZE, 1)), OPENGL|DOUBLEBUF)
+    pygame.display.set_mode(grid_size(solutions[-1]), OPENGL|DOUBLEBUF)
     
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -697,12 +702,12 @@ if __name__ == '__main__':
                     glClear(GL_COLOR_BUFFER_BIT)
                     glMatrixMode(GL_PROJECTION)
                     glLoadIdentity()
-                    gluOrtho2D(0, solutions[index].shape[0], solutions[index].shape[1], 0)
+                    gluOrtho2D(-args.padding, solutions[index].shape[0] + args.padding, solutions[index].shape[1] + args.padding, -args.padding)
                     glMatrixMode(GL_MODELVIEW)
 
                     glLineWidth(1)
                     glColor3f(1,0,0)
-                    render_grid(solutions[index].shape[0], solutions[index].shape[1])
+                    render_grid(-args.padding, solutions[index].shape[0] + args.padding, -args.padding, solutions[index].shape[1] + args.padding)
                     
                     render_solution(solutions[index], animation, not args.hide_colour, args.show_underground)
                     render_attributes(solutions[index], args.show_raw)
