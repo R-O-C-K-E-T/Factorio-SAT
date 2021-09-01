@@ -1,7 +1,6 @@
 from collections import defaultdict
 import math, copy, argparse, json
 from os import path
-from numpy.lib.arraysetops import isin
 
 from pysat.solvers import Solver
 
@@ -14,57 +13,65 @@ import blueprint
 from util import *
 
 
-def create_benes_network(size, prevent_limited_throughput=False):
+def create_benes_network(size):
     assert size >= 2
     if size == 2:
-        return [((0,1), (2,3))]
+        return [((0,0), (1,1))]
     elif size % 2 == 1:
         inner = create_benes_network(size + 1)
 
-        input_colours, output_colours = get_exterior_colours(inner)
+        (network_input_colour, _), (network_output_colour, _) = get_input_output_colours(inner)
 
-        return remap_colours(inner, {output_colours.pop(): input_colours.pop()})
+        network = []
+        replaced = False
+        for input_colours, output_colours in inner:
+            if not replaced:
+                if input_colours[0] == network_input_colour:
+                    input_colours = network_output_colour, input_colours[1]
+                    replaced = True
+                elif input_colours[1] == network_input_colour:
+                    input_colours = network_output_colour, input_colours[0]
+                    replaced = True
+            network.append((input_colours, output_colours))
+
+        return network
     else:
-        inner = create_benes_network(size // 2)
+        inner_size = size // 2
+        inner = create_benes_network(inner_size)
 
         inner_output_colours = set()
         inner_input_colours = set()
         for inputs, outputs in inner:
             inner_input_colours |= set(inputs)
             inner_output_colours |= set(outputs)
-
         inner_all_colours = inner_input_colours | inner_output_colours
-        inner_input_colours, inner_output_colours = inner_input_colours - inner_output_colours, inner_output_colours - inner_input_colours
 
-        inner_a_mapping = dict((colour, i + size) for i, colour in enumerate(inner_all_colours))
-        inner_b_mapping = dict((colour, i + size + len(inner_all_colours)) for i, colour in enumerate(inner_all_colours))
+        (inner_input_colour, _), (inner_output_colour, _) = get_input_output_colours(inner)
+
+        inner_a_mapping = {inner_input_colour: 1}
+        inner_b_mapping = {inner_input_colour: 2}
+        i = 3
+        for colour in inner_all_colours - {inner_input_colour, inner_output_colour}:
+            inner_a_mapping[colour] = i + 0
+            inner_b_mapping[colour] = i + 1
+            i += 2
+        inner_a_mapping[inner_output_colour] = i
+        inner_b_mapping[inner_output_colour] = i
 
         inner_a = remap_colours(inner, inner_a_mapping)
         inner_b = remap_colours(inner, inner_b_mapping)
 
-        nodes = [] 
-        for i, input_colour in enumerate(inner_input_colours):
-            nodes.append(
-                ((2*i, 2*i + 1), (inner_a_mapping[input_colour], inner_b_mapping[input_colour]))
-            )
-
-        nodes += inner_a
-        nodes += inner_b
-
-        if prevent_limited_throughput:
-            offset = 2 * len(inner_all_colours) + size
-            for i, output_colour in enumerate(inner_output_colours):
-                nodes.append(
-                    ((inner_a_mapping[output_colour], inner_b_mapping[output_colour]), (2*i + offset, 2*i + offset + 1))
-                )
-
-        return nodes
+        return [((0, 0), (1, 2))] * inner_size + inner_a + inner_b
 
 def plot(network, filename=None, engine='dot'):
     g = Digraph(engine=engine, node_attr={'shape': 'rect', 'height': '0.5', 'width': '0.3'}, graph_attr={'rankdir': 'LR'})
 
     g.node('start', style='invis')
     g.node('end', style='invis')
+
+    (network_input_colour, _), (network_output_colour, _) = get_input_output_colours(network)
+    g.edge('start', 'c{}'.format(network_input_colour))
+    g.edge('c{}'.format(network_output_colour), 'end')
 
     INPUT_SIDE = False
     OUTPUT_SIDE = True
@@ -652,8 +659,7 @@ if __name__ == '__main__':
 
     create_parser = subparsers.add_parser('create', help='Create a belt balancer network')
     create_parser.add_argument('network', type=argparse.FileType('w'), help='Output network destination')
-    create_parser.add_argument('input_size', type=int, help='Input size for the balancer')
-    create_parser.add_argument('output_size', type=int, help='Output size for the balancer')
+    create_parser.add_argument('size', type=int, help='Size of the generated balancer')
 
     #optimise_parser = subparsers.add_parser('optimise', help='Optimises a network colour layout (not guaranteed to reduce solver times)')
     #optimise_parser.add_argument('input_network', type=argparse.FileType('r'), help='Input network destination')
@@ -674,32 +680,15 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # if args.mode == 'create':
-    #     if args.input_size < 1:
-    #         raise RuntimeError('Input size too small')
-    #     if args.output_size < 1:
-    #         raise RuntimeError('Output size too small')
+    if args.mode == 'create':
+        if args.size <= 1:
+            raise RuntimeError('Input size too small')
 
-    #     if args.input_size == 1 and args.output_size == 1:
-    #         raise RuntimeError('Invalid size')
+        network = create_benes_network(args.size)
 
-
-
-    #     network = create_benes_network(max(args.input_size, args.output_size))
-
-    #     input_colours, _ = get_exterior_colours(network)
-
-    #     if args.input_size < args.output_size:
-    #         network = remap_colours(network, dict((colour, None) for _, colour in zip(range(args.output_size - args.input_size), input_colours)))
-    #     elif args.output_size < args.input_size:
-    #         network = remap_colours(network, dict((colour, None) for _, colour in zip(range(args.input_size - args.output_size), input_colours)))
-    #         network = flip_network(network)
-
-    #     network = simplify(network)
-
-    #     with args.network:
-    #         save_network(args.network, network)
-    if args.mode == 'render':
+        with args.network:
+            save_network(args.network, network)
+    elif args.mode == 'render':
         with args.network:
             network = open_network(args.network)
 
@@ -721,8 +710,7 @@ if __name__ == '__main__':
         
         if args.mode == 'flip':
             out_network = flip_network(in_network)
-        #elif args.mode == 'optimise':
-            #out_network = optimise_colours(in_network)
+            out_network = out_network[::-1]
         else:
             assert False
 
