@@ -5,7 +5,7 @@ try:
     from luaparser import ast
 except ModuleNotFoundError:
     print('"luaparser" not installed: recipe fetching will be disabled')
-    luaparser = None
+    ast = None
 
 def fetch_tilemaps(base_directory: str):
     graphics_directory = path.join(base_directory, 'graphics', 'entity')
@@ -170,5 +170,5 @@ if __name__ == '__main__':
     base_directory = path.join(game_directory, 'data', 'base')
 
     fetch_tilemaps(base_directory)
-    if luaparser is not None:
+    if ast is not None:
         fetch_recipes(base_directory)
