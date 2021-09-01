@@ -1,12 +1,13 @@
+from sys import stdin
 from typing import *
 
-import traceback, math, collections, subprocess, shlex, io
+import traceback, math, collections, subprocess, shlex, io, tempfile
 from os.path import basename
 
 import numpy as np
 
 from pysat.solvers import Solver
-from pysat.formula import CNF
+from pysat.formula import CNF, IDPool
 
 from ipasir import IPASIRLibrary
 
@@ -372,6 +373,9 @@ def invert_number(input: List[VariableType], output: List[VariableType], allocat
 
     return clauses
 
+def is_power_of_two(value):
+    return not (value & (value - 1))     
+
 def get_bits(value: int, total_bits: int) -> Generator[bool, None, None]:
     # Result is little-endian
     for bit in range(total_bits):
@@ -397,6 +401,14 @@ def product(values):
     for value in values:
         result *= value
     return result
+
+def make_allocator(initial: int) -> AllocatorType:
+    value = initial
+    def allocator():
+        nonlocal value
+        value += 1
+        return value
+    return allocator
 
 T = TypeVar('T')
 def combinations(items: List[T], size: int) -> Generator[List[T], None, None]:
@@ -570,12 +582,8 @@ def expand_edge_mode(edge_mode: EdgeModeType) -> Tuple[EdgeModeEnumType, EdgeMod
         return edge_mode
 
 def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[VariableType]]:
-    formula = CNF(from_clauses=clauses)
-
-    with subprocess.Popen(shlex.split(cmd), stdin=subprocess.PIPE, stdout=subprocess.PIPE) as process:
-        formula.to_fp(io.TextIOWrapper(process.stdin))
-        result = io.TextIOWrapper(process.stdout)
-
+    def interpret_solver_answer(stdout):
+        result = io.TextIOWrapper(stdout)
         while True:
             line = result.readline()
             if line.startswith('s'):
@@ -599,6 +607,23 @@ def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[VariableT
                 break
         return model
 
+    formula = CNF(from_clauses=clauses)
+    pieces = shlex.split(cmd)
+    if '$FILE' in pieces:
+        with tempfile.NamedTemporaryFile('w', suffix='.cnf') as file:
+            formula.to_file(file.name)
+            file.flush()
+
+            pieces = [file.name if piece == '$FILE' else piece for piece in pieces]
+
+            with subprocess.Popen(pieces, stdout=subprocess.PIPE) as process:
+                return interpret_solver_answer(process.stdout)
+    else:
+        with subprocess.Popen(pieces, stdin=subprocess.PIPE, stdout=subprocess.PIPE) as process:
+            formula.to_fp(io.TextIOWrapper(process.stdin))
+            process.stdin.close()
+            return interpret_solver_answer(process.stdout)
+
 class BaseGrid:
     def __init__(self, template: TileTemplate, width: int, height: int):
         assert width > 0 and height > 0
@@ -606,7 +631,7 @@ class BaseGrid:
         self.width = width
         self.height = height
 
-        self.extra_variables = 0
+        self.pool = IDPool(start_from=self.total_variables + 1)
         self.clauses: List[ClauseType] = []
 
         #self.clauses += template.initial_clauses(range(self.width * self.height))
@@ -625,9 +650,7 @@ class BaseGrid:
                 yield self.get_tile_instance(x, y)
 
     def allocate_variable(self):
-        result = 1 + self.total_variables + self.extra_variables
-        self.extra_variables += 1
-        return result
+        return self.pool._next()
 
     def get_tile_instance(self, x: int, y: int):
         assert x >= 0 and y >= 0 and x < self.width and y < self.height
@@ -666,24 +689,7 @@ class BaseGrid:
         return np.array(self.template.parse(variables)).reshape((self.height, self.width)).T    
 
     def check(self, solver: str='g3'):
-        if solver == 'cryptosat':
-            s = PyCryptoSolver()
-            satisfiable, _ = s.solve()
-            return satisfiable
-        elif solver.startswith('cmd:'):
-            solution = run_command_solver(solver[4:], self.clauses)
-            if solution is None:
-                return None
-            return self.parse_solution(solution)
-        else:
-            if solver.startswith('lib:'):
-                s = IPASIRLibrary(solver[4:]).create_solver()
-                s.add_clauses(self.clauses)
-            else:
-                s = Solver(name=solver, bootstrap_with=self.clauses)
-            
-            with s:
-                return s.solve()
+        return self.solve(solver) is not None
     
     def solve(self, solver: str='g3'):
         if solver == 'cryptosat':

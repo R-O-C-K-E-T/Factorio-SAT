@@ -27,10 +27,7 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
 
                 for i in range(len(tile_a.colour)):
                     grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]], variables_same(colour_a[i], tile_b.colour[i]))
-                    grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], variables_same(colour_a[i], colour_b[i]))
-
-def is_power_of_two(value):
-    return not (value & (value - 1))          
+                    grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], variables_same(colour_a[i], colour_b[i]))     
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a stream of blocks of random belts')

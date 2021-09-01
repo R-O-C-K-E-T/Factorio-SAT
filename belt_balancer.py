@@ -1,5 +1,8 @@
-from cardinality import adder_greater_equal, logarithmic_one, naive_greater_equal, quadratic_one
-import time, argparse, json
+from collections import defaultdict
+
+from pysat.card import EncType
+from cardinality import library_atleast, library_equals, quadratic_one, library_equals
+import time, argparse, json, sys
 import numpy as np
 
 from solver import Grid, Belt
@@ -65,7 +68,7 @@ def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offse
         grid.set_tile(grid.width-1, y, None)
 
 def setup_balancer_ends(grid: Grid, network, aligned: bool):
-    (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network)
+    (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network.elements())
 
     start_offsets = [grid.allocate_variable() for _ in range(grid.height - input_count)]
     end_offsets   = [grid.allocate_variable() for _ in range(grid.height - output_count)]
@@ -97,6 +100,11 @@ def setup_balancer_ends(grid: Grid, network, aligned: bool):
             for i, end_offset in enumerate(end_offsets):
                 grid.clauses += implies([end_offset], [start_offsets[i:(i + 1 + output_count - input_count)]])
 
+def deduplicate_network(network):
+    key = lambda colour: -math.inf if colour is None else colour
+    network = [(tuple(sorted(inputs, key=key)), tuple(sorted(outputs, key=key))) for inputs, outputs in network]
+    return Counter(network)
+
 def create_balancer(network, width: int, height: int) -> Grid:
     assert width > 0 and height > 0
 
@@ -116,16 +124,18 @@ def create_balancer(network, width: int, height: int) -> Grid:
     grid.prevent_bad_colouring(EDGE_MODE_BLOCK)
 
     # There is exactly one splitter of each type
-    for i in range(len(network)):
+    for i, count in enumerate(network.values()):
         variables = [grid.get_tile_instance(x, y).node[i] for x in range(grid.width) for y in range(grid.height)]
-        grid.clauses += logarithmic_one(variables, grid.allocate_variable)
+        grid.clauses += library_equals(variables, count, grid.pool, EncType.kmtotalizer)
+
 
     # Each splitter has one type
     for x in range(grid.width):
         for y in range(grid.height):
             tile = grid.get_tile_instance(x, y)
-
+            #grid.clauses += heule_one([-tile.is_splitter[0], *tile.node], grid.allocate_variable)
             grid.clauses += quadratic_one([-tile.is_splitter[0], *tile.node])
+            #grid.clauses += library_equals([-tile.is_splitter[0], *tile.node], 1, grid.pool)
 
     for i, (input_colours, output_colours) in enumerate(network):
         assert sum(colour is None for colour in input_colours + output_colours) <= 1
@@ -192,12 +202,11 @@ def create_balancer(network, width: int, height: int) -> Grid:
     return grid
 
 def enforce_edge_splitters(grid: Grid, network):
-    # Any optimal balancer must have a balancer the same size that has both inputs/outputs connected directly to the overall input/outputs (I think)
-    (network_input_colour, _), (network_output_colour, _) = get_input_output_colours(network)
+    (network_input_colour, _), (network_output_colour, _) = get_input_output_colours(network.elements())
 
     recirculate_input = 0
     recirculate_output = 0
-    for inputs, outputs in network:
+    for inputs, outputs in network.elements():
         for colour in inputs:
             if colour == network_output_colour:
                 recirculate_output += 1
@@ -205,37 +214,76 @@ def enforce_edge_splitters(grid: Grid, network):
             if colour == network_input_colour:
                 recirculate_input += 1
 
-    input_splitters = [i for i, (input_colours, _) in enumerate(network) if all(colour == network_input_colour for colour in input_colours)]
+    input_splitters = [(i, count) for i, ((input_colours, _), count) in enumerate(network.items()) if all(colour == network_input_colour for colour in input_colours)]
     if recirculate_input == 0:
-        for i in input_splitters:
-            grid.clauses.append([grid.get_tile_instance(1, y).node[i] for y in range(grid.height)])
+        for i, count in input_splitters:
+            variables = [grid.get_tile_instance(1, y).node[i] for y in range(grid.height)]
+            grid.clauses += library_equals(variables, count, grid.pool, EncType.kmtotalizer)
             for y in range(grid.height):
                 tile = grid.get_tile_instance(1, y)
                 grid.clauses += implies([tile.node[i]], [[tile.input_direction[0], tile.output_direction[0]]])
     else:
-        edge_splitter_min = len(input_splitters) - recirculate_input
+        edge_splitter_min = sum(count for _, count in input_splitters) - recirculate_input
         if edge_splitter_min > 0:
-            variables = [grid.allocate_variable() for _ in input_splitters]
-            for i, variable in zip(input_splitters, variables):
-                grid.clauses += implies([variable], [[grid.get_tile_instance(1, y).node[i] for y in range(grid.height)]])
-            # grid.clauses += naive_greater_equal(variables, edge_splitter_min)
-            grid.clauses += adder_greater_equal(variables, edge_splitter_min, grid.allocate_variable)
+            variables = [grid.get_tile_instance(1, y).node[i] for y in range(grid.height) for i, _ in input_splitters]
+            grid.clauses += library_atleast(variables, edge_splitter_min, grid.pool)
 
-    output_splitters = [i for i, (_, output_colours) in enumerate(network) if all(colour == network_output_colour for colour in output_colours)]
+    output_splitters = [(i, count) for i, ((_, output_colours), count) in enumerate(network.items()) if all(colour == network_output_colour for colour in output_colours)]
     if recirculate_output == 0:
-        for i in output_splitters:
-            grid.clauses.append([grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height)])
+        for i, count in output_splitters:
+            variables = [grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height)]
+            grid.clauses += library_equals(variables, count, grid.pool, EncType.kmtotalizer)
+
+            # grid.clauses.append([grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height)])
             for y in range(grid.height):
                 tile = grid.get_tile_instance(grid.width - 2, y)
                 grid.clauses += implies([tile.node[i]], [[tile.input_direction[0], tile.output_direction[0]]])
     else:
-        edge_splitter_min = len(output_splitters) - recirculate_output
+        edge_splitter_min = sum(count for _, count in output_splitters) - recirculate_output
         if edge_splitter_min > 0:
-            variables = [grid.allocate_variable() for _ in output_splitters]
-            for i, variable in zip(output_splitters, variables):
-                grid.clauses += implies([variable], [[grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height)]])
-            # grid.clauses += naive_greater_equal(variables, edge_splitter_min)            
-            grid.clauses += adder_greater_equal(variables, edge_splitter_min, grid.allocate_variable)
+            variables = [grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height) for i, _ in output_splitters]
+            grid.clauses += library_atleast(variables, edge_splitter_min, grid.pool)
+
+def prevent_double_edge_belts(grid: Grid):
+    for x in (1, max(grid.width - 2, 1)):
+        for y in range(grid.height - 1):
+            tile_a = grid.get_tile_instance(x, y)
+            tile_b = grid.get_tile_instance(x, y + 1)
+
+            grid.clauses.append([
+                -tile_a.input_direction[0], -tile_a.output_direction[0], *tile_a.is_splitter,
+                -tile_b.input_direction[0], -tile_b.output_direction[0], *tile_b.is_splitter,
+            ])
+
+def glue_splitters(grid: Grid):
+    for x in range(grid.width):
+        for y in range(grid.height):
+            tile = grid.get_tile_instance(x, y)
+            for direction in range(4):
+                if direction == 0 and (x == 1 or x == grid.width - 2): # Ignore edge splitters
+                    continue
+                
+                dx0, dy0 = direction_to_vec(direction)
+                dx1, dy1 = direction_to_vec((direction + 1) % 4)
+
+                tile_in0 = grid.get_tile_instance_offset(x, y, -dx0, -dy0, EDGE_MODE_BLOCK)
+                tile_in1 = grid.get_tile_instance_offset(x, y, -dx0 + dx1, -dy0 + dy1, EDGE_MODE_BLOCK)
+
+                if tile_in0 == BLOCKED_TILE or tile_in1 == BLOCKED_TILE:
+                    continue
+
+                grid.clauses.append([
+                    -tile.is_splitter[0],
+                    -tile.input_direction[direction],
+
+                    -tile_in0.input_direction[direction],
+                    -tile_in0.output_direction[direction],
+                    *tile_in0.is_splitter,
+
+                    -tile_in1.input_direction[direction],
+                    -tile_in1.output_direction[direction],
+                    *tile_in1.is_splitter,
+                ])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
@@ -243,20 +291,31 @@ if __name__ == '__main__':
     parser.add_argument('width', type=int, help='Belt balancer maximum width')
     parser.add_argument('height', type=int, help='Belt balancer maximum height')
     parser.add_argument('--edge-splitters', action='store_true', help='Enforce that any splitter that has both connections to the input/output of the balancer must be placed on the edge')
+    parser.add_argument('--edge-belts', action='store_true', help='Prevents two side by side belts at the inputs/outputs of a balancer (weaker version of --edge-splitters)')
+    parser.add_argument('--glue-splitters', action='store_true', help='Prevents a configuration where a splitter has two straight input belts. Effectively pushing all splitters as far back as possible')
     parser.add_argument('--aligned', action='store_true', help='Enforces balancer input aligns with output')
     parser.add_argument('--underground-length', type=int, default=4, help='Sets the maximum length of underground section (excludes ends)')
     parser.add_argument('--all', action='store_true', help='Generate all belt balancers')
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
     args = parser.parse_args()
 
+    if args.edge_splitters and args.edge_belts:
+        raise RuntimeError('--edge-splitters and --edge-belts are mutually exclusive')
+
     network = open_network(args.network)
     args.network.close()
+
+    network = deduplicate_network(network)
 
     grid = create_balancer(network, args.width, args.height)
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
 
     if args.edge_splitters:
         enforce_edge_splitters(grid, network)
+    if args.edge_belts:
+        prevent_double_edge_belts(grid)
+    if args.glue_splitters:
+        glue_splitters(grid)
 
     #setup_balancer_ends_with_offsets(grid, network, 1, 0)#args.start_offset, args.end_offset)
     grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)

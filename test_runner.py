@@ -5,7 +5,7 @@ from util import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
 from solver import Grid
 from typing import *
 
-from belt_balancer import create_balancer
+from belt_balancer import create_balancer, deduplicate_network
 from network import open_network
 from stringifier import decode
 
@@ -40,6 +40,7 @@ class TestCase:
     def run(self):
         if 'network' in self.params:
             network = open_network(self.params['network'])
+            network = deduplicate_network(network)
             grid = create_balancer(network, self.tiles.shape[1], self.tiles.shape[0])
         else:
             grid = Grid(self.tiles.shape[1], self.tiles.shape[0], 1)

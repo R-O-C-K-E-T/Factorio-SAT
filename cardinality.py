@@ -1,4 +1,7 @@
 from typing import *
+
+from pysat.card import CardEnc, EncType
+from pysat.formula import IDPool
 from util import *
 
 # AMO - At Most One
@@ -37,29 +40,20 @@ def logarithmic_one(variables: List[VariableType], allocator: AllocatorType) -> 
 def heule_one(variables: List[VariableType], allocator: AllocatorType, recursive_cutoff: int=3) -> ClauseList:
     return heule_amo(variables, allocator, recursive_cutoff) + [list(variables)]
 
-
-def naive_less_than(variables: List[VariableType], n: int, _: Optional[AllocatorType]=None) -> ClauseList:
-    clauses = []
-    for combination in combinations(variables, n):
-        clauses.append(invert_components(combination))
+def library_equals(inputs: List[VariableType], n: int, pool: IDPool, encoding=EncType.kmtotalizer) -> ClauseList:
+    clauses = CardEnc.equals(inputs, n, vpool=pool, encoding=encoding).clauses
+    if len(clauses) == 0:
+        raise RuntimeError('Failed to generate clauses')
     return clauses
 
-def adder_less_than(variables: List[VariableType], n: int, allocator: AllocatorType) -> ClauseList:
-    bits = [allocator() for _ in range(bin_length(len(variables) + 1))]
-    
-    clauses = get_popcount(variables, bits, allocator)
-    for i in range(n, 2**len(bits)):
-        clauses.append(set_not_number(i, bits))
+def library_atmost(inputs: List[VariableType], n: int, pool: IDPool) -> ClauseList:
+    clauses = CardEnc.atmost(inputs, n, vpool=pool, encoding=EncType.kmtotalizer).clauses
+    if len(clauses) == 0:
+        raise RuntimeError('Failed to generate clauses')
     return clauses
 
-
-def adder_greater_equal(variables: List[VariableType], n: int, allocator: AllocatorType) -> ClauseList:
-    bits = [allocator() for _ in range(bin_length(len(variables) + 1))]
-    
-    clauses = get_popcount(variables, bits, allocator)
-    for i in range(n):
-        clauses.append(set_not_number(i, bits))
+def library_atleast(inputs: List[VariableType], n: int, pool: IDPool) -> ClauseList:
+    clauses = CardEnc.atleast(inputs, n, vpool=pool, encoding=EncType.kmtotalizer).clauses
+    if len(clauses) == 0:
+        raise RuntimeError('Failed to generate clauses')
     return clauses
-
-def naive_greater_equal(variables: List[VariableType], n: int, _: Optional[AllocatorType]=None) -> ClauseList:
-    return naive_less_than(invert_components(variables), len(variables) - n + 1)
