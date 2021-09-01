@@ -310,6 +310,36 @@ def set_number(value: int, variables: List[VariableType]) -> ClauseList:
         clauses.append([set_variable(var, bit)])
     return clauses
 
+def set_numbers(value_a: int, value_b: int, variables_a: List[VariableType], variables_b: List[VariableType]) -> ClauseList:
+    # One set of variables is set to value_a, the other is set to value_b
+    assert len(variables_a) == len(variables_b)
+    total_bits = len(variables_a)
+    assert value_a < (1 << total_bits)
+    assert value_b < (1 << total_bits)
+
+    clauses = []
+    differences = []
+    for var_a, var_b, bit_a, bit_b in zip(variables_a, variables_b, get_bits(value_a, total_bits), get_bits(value_b, total_bits)):
+        if bit_a == bit_b:
+            clauses.append([set_variable(var_a, bit_a)])
+            clauses.append([set_variable(var_b, bit_a)])
+        else:
+            clauses += variables_different(var_a, var_b)
+            differences.append((var_a, var_b, bit_a))
+
+    if len(differences) != 0:
+        var_a0, var_b0, bit_a0 = differences[0]
+        #clauses += variables_different(var_a0, var_b0)
+        for var_a1, var_b1, bit_a1 in differences[1:]:
+            if bit_a0 == bit_a1: # Bits are correlated
+                clauses += variables_same(var_a0, var_a1)
+                #clauses += variables_different(var_a0, var_b1)
+            else: # Anti-correlated
+                clauses += variables_different(var_a0, var_a1)
+                #clauses += variables_same(var_a0, var_b1)
+
+    return clauses
+
 def set_numbers_equal(number_a: List[VariableType], number_b: List[VariableType], allow_different_lengths: bool=False) -> ClauseList:
     clauses = []
 
