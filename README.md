@@ -7,11 +7,11 @@ Enhancing the Factorio experience with SAT solvers.
  * A balancer size is selected. 
  * Tiles get represented as a list of boolean (true/false) variables (input direction, output direction, underground state, splitter side, splitter id, colour).
  * Clauses (rules) are written to restrict solutions to only valid balancers:
-  * Belts don't intersect
-  * Colour along a belt is consistent
-  * The ends of the balancer have the correct input/output colours
-  * If a splitter has the given id, then its inputs/outputs the correct colours
-  * The number of splitters with each id is correct and each splitter has an id
+   * Belts don't intersect
+   * Colour along a belt is consistent
+   * The ends of the balancer have the correct input/output colours
+   * If a splitter has the given id, then its inputs/outputs the correct colours
+   * The number of splitters with each id is correct and each splitter has an id
  * Clauses are passed into a solver which either returns the solution or proves there is no solution
  * If no solution is found then a new size is selected
 
