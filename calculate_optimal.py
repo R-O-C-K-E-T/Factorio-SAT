@@ -37,6 +37,7 @@ def get_offsets(height, input_size, output_size):
 def solve_balancer(network, size, solver):
     maximum_underground_length, width, height = size
 
+    network = belt_balancer.deduplicate_network(network)
     grid = belt_balancer.create_balancer(network, width, height)
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
     belt_balancer.setup_balancer_ends(grid, network, True)
