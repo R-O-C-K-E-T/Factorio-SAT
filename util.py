@@ -356,6 +356,20 @@ def set_numbers_equal(number_a: List[VariableType], number_b: List[VariableType]
 def set_not_number(value: int, variables: List[VariableType]) -> ClauseType:
     return [-var[0] for var in set_number(value, variables)]
 
+def set_maximum(value: int, variables: List[VariableType]):
+    if len(variables) == 0:
+        assert value == 0
+        return []
+    
+    tail = variables[1:]
+    clauses = set_maximum(value >> 1, tail)
+    if not (value & 1):
+        clause = [-variables[0]]
+        for bit, var in zip(get_bits(value >> 1, len(tail)), tail):
+            if bit:
+                clause.append(-var)
+        clauses.append(clause)
+    return clauses
 
 def invert_number(input: List[VariableType], output: List[VariableType], allocator: AllocatorType):
     assert len(input) == len(output)
@@ -638,10 +652,12 @@ def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[VariableT
         return model
 
     formula = CNF(from_clauses=clauses)
+    del clauses
     pieces = shlex.split(cmd)
     if '$FILE' in pieces:
         with tempfile.NamedTemporaryFile('w', suffix='.cnf') as file:
             formula.to_file(file.name)
+            del formula
             file.flush()
 
             pieces = [file.name if piece == '$FILE' else piece for piece in pieces]
@@ -651,6 +667,7 @@ def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[VariableT
     else:
         with subprocess.Popen(pieces, stdin=subprocess.PIPE, stdout=subprocess.PIPE) as process:
             formula.to_fp(io.TextIOWrapper(process.stdin))
+            del formula
             process.stdin.close()
             return interpret_solver_answer(process.stdout)
 

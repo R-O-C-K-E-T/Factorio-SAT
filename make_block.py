@@ -9,8 +9,15 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
         for x in range(grid.width):
             tile_a = grid.get_tile_instance(x, y)
 
+            if x == 0 and y == 0:
+                grid.clauses += [[-var] for var in tile_a.colour]
+            else:
+                grid.clauses.append(tile_a.colour)
+
             for direction in range(4):
-                tile_b = grid.get_tile_instance_offset(x, y, *direction_to_vec(direction), edge_mode)
+                dx, dy = direction_to_vec(direction)
+                tile_b = grid.get_tile_instance_offset(x, y, dx, dy, edge_mode)
+                x1, y1 = x + dx, y + dy
 
                 if tile_b in (BLOCKED_TILE, IGNORED_TILE):
                     continue
@@ -22,12 +29,16 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
                     colour_a = tile_a.colour_uy
                     colour_b = tile_b.colour_uy
 
-                grid.clauses += implies([tile_a.output_direction[direction]], increment_number(tile_a.colour, tile_b.colour))
+                if x1 == 0 and y1 == 0:
+                    grid.clauses += implies([tile_a.output_direction[direction]], set_number(grid.colours - 1, tile_a.colour))
+                else:
+                    grid.clauses += implies([tile_a.output_direction[direction]], increment_number(tile_a.colour, tile_b.colour))
+
                 grid.clauses += implies([tile_a.input_direction[direction], *invert_components(tile_a.output_direction)], increment_number(tile_a.colour, colour_b))
 
                 for i in range(len(tile_a.colour)):
                     grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]], variables_same(colour_a[i], tile_b.colour[i]))
-                    grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], variables_same(colour_a[i], colour_b[i]))     
+                    grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], variables_same(colour_a[i], colour_b[i]))  
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a stream of blocks of random belts')
@@ -47,13 +58,12 @@ if __name__ == '__main__':
     if args.allow_empty and args.single_loop:
         raise RuntimeError('Incompatible options: allow-empty + single-loop')
 
-    if args.single_loop and not is_power_of_two(args.width * args.height):
-        raise RuntimeError('Cannot create single loop if width*height is not power of two')
-
     if args.underground_length < 0:
         raise RuntimeError('Underground length cannot be negative')
-    
-    grid = solver.Grid(args.width, args.height, args.width * args.height if args.single_loop else 1)
+    if args.single_loop:
+        grid = solver.Grid(args.width, args.height, args.width * args.height)
+    else:
+        grid = solver.Grid(args.width, args.height, 1)
 
     edge_mode = EDGE_MODE_TILE if args.tile else EDGE_MODE_BLOCK
 
@@ -69,17 +79,16 @@ if __name__ == '__main__':
 
     if args.single_loop:
         ensure_loop_length(grid, edge_mode)
-        grid.clauses += set_number(0, grid.get_tile_instance(0,0).colour)
 
     for x in range(grid.width):
         for y in range(grid.height):
             tile = grid.get_tile_instance(x, y)
+
             if not args.allow_empty:
                 grid.clauses.append(tile.all_direction) # Ban Empty
 
             if args.underground_length == 0: # Ban underground
-                for direction in range(4):
-                    grid.clauses.append([-tile.underground[direction]])
+                grid.clauses += set_number(0, tile.underground)
 
             grid.clauses += set_number(0, tile.is_splitter) # Ban splitters
     

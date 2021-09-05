@@ -68,8 +68,7 @@ class Grid(BaseGrid):
 
                 # Prevent colours beyond end of range
                 for colour_range in (tile.colour, tile.colour_ux, tile.colour_uy):
-                    for colour in range(self.colours, 1<<self.colour_bits):
-                        self.clauses.append(set_not_number(colour, colour_range))
+                    self.clauses += set_maximum(self.colours - 1, colour_range)
         
         for y0 in range(height):
             for x0 in range(width):
