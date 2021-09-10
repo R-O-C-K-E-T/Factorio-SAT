@@ -5,9 +5,8 @@ from util import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
 from solver import Grid
 from typing import *
 
-from belt_balancer import create_balancer, deduplicate_network
-from network import open_network
-from stringifier import decode
+from network import open_network, deduplicate_network
+import stringifier, belt_balancer
 
 TEST_EDGE_START  = '┌'
 TEST_EDGE_MIDDLE = '│'
@@ -41,7 +40,7 @@ class TestCase:
         if 'network' in self.params:
             network = open_network(self.params['network'])
             network = deduplicate_network(network)
-            grid = create_balancer(network, self.tiles.shape[1], self.tiles.shape[0])
+            grid = belt_balancer.create_balancer(network, self.tiles.shape[1], self.tiles.shape[0])
         else:
             grid = Grid(self.tiles.shape[1], self.tiles.shape[0], 1)
             grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
@@ -118,7 +117,7 @@ def tokenise(lines):
                     break
             if not line.startswith(TEST_EDGE_STOP):
                 raise RuntimeError(f'Invalid test instance format at line {col+1}')
-            tokenised.append(('test', decode(test_case)))
+            tokenised.append(('test', stringifier.decode(test_case)))
     return tokenised
 
 def open_suite(filename):

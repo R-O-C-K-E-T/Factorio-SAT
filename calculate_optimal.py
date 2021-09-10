@@ -5,7 +5,7 @@ from functools import partial
 import numpy as np
 
 from util import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
-from network import open_network, get_input_output_colours
+from network import open_network, get_input_output_colours, deduplicate_network
 import belt_balancer, blueprint
 
 MAXIMUM_UNDERGROUND_LENGTHS = {
@@ -37,10 +37,14 @@ def get_offsets(height, input_size, output_size):
 def solve_balancer(network, size, solver):
     maximum_underground_length, width, height = size
 
-    network = belt_balancer.deduplicate_network(network)
+    network = deduplicate_network(network)
     grid = belt_balancer.create_balancer(network, width, height)
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
     belt_balancer.setup_balancer_ends(grid, network, True)
+    belt_balancer.glue_splitters(grid)
+    belt_balancer.expand_underground(grid, maximum_underground_length, EDGE_MODE_BLOCK)
+    belt_balancer.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
+    grid.prevent_small_loops()
     belt_balancer.enforce_edge_splitters(grid, network)
     grid.set_maximum_underground_length(maximum_underground_length, EDGE_MODE_BLOCK)
     grid.prevent_empty_along_underground(maximum_underground_length, EDGE_MODE_BLOCK)

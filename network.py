@@ -638,6 +638,11 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
 
     return network
 
+def deduplicate_network(network):
+    key = lambda colour: -math.inf if colour is None else colour
+    network = [(tuple(sorted(inputs, key=key)), tuple(sorted(outputs, key=key))) for inputs, outputs in network]
+    return Counter(network)
+
 def tidy_network(network):
     network = fix_colours(network)
 

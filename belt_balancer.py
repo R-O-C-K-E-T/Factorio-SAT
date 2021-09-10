@@ -7,7 +7,7 @@ import numpy as np
 
 from solver import Grid, Belt
 from util import *
-from network import get_input_output_colours, open_network
+from network import get_input_output_colours, open_network, deduplicate_network
 
 
 def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offset: int):
@@ -68,11 +68,6 @@ def setup_balancer_ends(grid: Grid, network, aligned: bool):
         else:
             for i, end_offset in enumerate(end_offsets):
                 grid.clauses += implies([end_offset], [start_offsets[i:(i + 1 + output_count - input_count)]])
-
-def deduplicate_network(network):
-    key = lambda colour: -math.inf if colour is None else colour
-    network = [(tuple(sorted(inputs, key=key)), tuple(sorted(outputs, key=key))) for inputs, outputs in network]
-    return Counter(network)
 
 def create_balancer(network, width: int, height: int) -> Grid:
     assert width > 0 and height > 0
@@ -254,6 +249,99 @@ def glue_splitters(grid: Grid):
                     *tile_in1.is_splitter,
                 ])
 
+def shrink_underground(grid: Grid, edge_mode: EdgeModeType):
+    # Has some correctness problems
+    for x in range(grid.width):
+        for y in range(grid.height):
+            tile_a = grid.get_tile_instance(x, y)
+            for direction in range(4):
+                dx0, dy0 = direction_to_vec(direction)
+                tile_b = grid.get_tile_instance_offset(x, y, dx0, dy0, edge_mode)
+                if tile_b == BLOCKED_TILE or tile_b == IGNORED_TILE:
+                    continue
+                
+                grid.clauses += implies([
+                    -tile_a.underground[direction],
+                    tile_b.underground[direction],
+                ], [set_not_number(0, tile_b.all_direction)])
+
+                grid.clauses += implies([
+                    tile_a.underground[direction],
+                    -tile_b.underground[direction],
+                ], [set_not_number(0, tile_a.all_direction)])
+
+def expand_underground(grid: Grid, underground_length: int, edge_mode: EdgeModeType):
+    assert underground_length > 1
+    for x in range(grid.width):
+        for y in range(grid.height):
+            for direction in range(4):
+                dx, dy = direction_to_vec(direction)
+                tiles = [grid.get_tile_instance_offset(x, y, dx*i, dy*i, edge_mode) for i in range(underground_length + 2)]
+                if any(tile == BLOCKED_TILE or tile == IGNORED_TILE for tile in tiles):
+                    continue
+
+                # BI--O
+                grid.clauses.append([
+                    -tiles[0].input_direction[direction],
+                    -tiles[0].output_direction[direction], 
+                    *tiles[0].is_splitter,
+
+                    tiles[1].underground[direction],
+
+                    *(-tile.underground[direction] for tile in tiles[2:-1]),
+
+                    tiles[-1].underground[direction],
+                ])
+
+                # I--OB
+                grid.clauses.append([
+                    tiles[0].underground[direction],
+
+                    *(-tile.underground[direction] for tile in tiles[1:-2]),
+
+                    tiles[-2].underground[direction],
+
+                    -tiles[-1].input_direction[direction],
+                    -tiles[-1].output_direction[direction], 
+                    *tiles[-1].is_splitter,
+                ])
+
+    if underground_length > 2:
+        expand_underground(grid, underground_length-1, edge_mode)
+
+def prevent_belt_hooks(grid: Grid, edge_mode: EdgeModeType):
+    for x in range(grid.width):
+        for y in range(grid.height):
+            tile00 = grid.get_tile_instance(x, y)
+            for direction in range(4):
+                for tangent in (direction + 1, direction + 3):
+                    tangent %= 4
+                    inverse = (direction + 2) % 4
+
+                    dx0, dy0 = direction_to_vec(direction)
+                    dx1, dy1 = direction_to_vec(tangent)
+                    tile01 = grid.get_tile_instance_offset(x, y, dx0, dy0, edge_mode)
+                    tile10 = grid.get_tile_instance_offset(x, y, dx1, dy1, edge_mode)
+                    tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, edge_mode)
+
+                    if any(tile == BLOCKED_TILE or tile == IGNORED_TILE for tile in (tile01, tile10, tile11)):
+                        continue
+
+                    for in_direction in (direction, tangent):
+                        for out_direction in (tangent, inverse):
+                            grid.clauses.append([
+                                -tile00.input_direction[in_direction],
+                                -tile00.output_direction[direction],
+                                *tile00.is_splitter,
+
+                                -tile01.output_direction[tangent],
+
+                                -tile11.output_direction[inverse],
+
+                                -tile10.output_direction[out_direction],
+                                *tile10.is_splitter,
+                            ])
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
     parser.add_argument('network', type=argparse.FileType('r'), help='Splitter network')
@@ -262,6 +350,9 @@ if __name__ == '__main__':
     parser.add_argument('--edge-splitters', action='store_true', help='Enforce that any splitter that has both connections to the input/output of the balancer must be placed on the edge')
     parser.add_argument('--edge-belts', action='store_true', help='Prevents two side by side belts at the inputs/outputs of a balancer (weaker version of --edge-splitters)')
     parser.add_argument('--glue-splitters', action='store_true', help='Prevents a configuration where a splitter has two straight input belts. Effectively pushing all splitters as far back as possible')
+    parser.add_argument('--expand-underground', action='store_true', help='Ensures that underground belts are expanded if possible')
+    parser.add_argument('--prevent-bad-patterns', action='store_true', help='Prevents patterns of belts that are not helpful, i.e. always substitutable for a simpler configuration.')
+    parser.add_argument('--fast', action='store_true', help='Enables all speed improving options')
     parser.add_argument('--aligned', action='store_true', help='Enforces balancer input aligns with output')
     parser.add_argument('--underground-length', type=int, default=4, help='Sets the maximum length of underground section (excludes ends)')
     parser.add_argument('--all', action='store_true', help='Generate all belt balancers')
@@ -279,12 +370,17 @@ if __name__ == '__main__':
     grid = create_balancer(network, args.width, args.height)
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
 
-    if args.edge_splitters:
+    if args.edge_splitters or args.fast:
         enforce_edge_splitters(grid, network)
     if args.edge_belts:
         prevent_double_edge_belts(grid)
-    if args.glue_splitters:
+    if args.glue_splitters or args.fast:
         glue_splitters(grid)
+    if args.expand_underground or args.fast:
+        expand_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
+    if args.prevent_bad_patterns or args.fast:
+        prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
+        grid.prevent_small_loops()
 
     #setup_balancer_ends_with_offsets(grid, network, 1, 0)#args.start_offset, args.end_offset)
     grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
