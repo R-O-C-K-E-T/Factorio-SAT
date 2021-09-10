@@ -40,6 +40,20 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
                     grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]], variables_same(colour_a[i], tile_b.colour[i]))
                     grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], variables_same(colour_a[i], colour_b[i]))  
 
+def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
+    for x in range(grid.width):
+        for y in range(grid.height):
+            tile_a = grid.get_tile_instance(x, y)
+            for direction in range(2):
+                tile_b = grid.get_tile_instance_offset(x, y, *direction_to_vec(direction + 1), edge_mode)
+                if tile_b == BLOCKED_TILE or tile_b == IGNORED_TILE:
+                    continue
+
+                grid.clauses.append([-tile_a.underground[direction + 0], -tile_b.underground[direction + 0]])
+                grid.clauses.append([-tile_a.underground[direction + 2], -tile_b.underground[direction + 0]])
+                grid.clauses.append([-tile_a.underground[direction + 0], -tile_b.underground[direction + 2]])
+                grid.clauses.append([-tile_a.underground[direction + 2], -tile_b.underground[direction + 2]])
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a stream of blocks of random belts')
     parser.add_argument('width', type=int, help='Block width')
@@ -47,6 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--tile', action='store_true', help='Makes output blocks tilable')
     parser.add_argument('--allow-empty', action='store_true', help='Allow empty tiles')
     parser.add_argument('--underground-length', type=int, default=4, help='Maximum length of underground section (excludes ends)')
+    parser.add_argument('--no-parallel', action='store_true', help='Prevent parallel underground segments')
     parser.add_argument('--all', action='store_true', help='Produce all blocks')
     parser.add_argument('--label', type=str, help='Output blueprint label')
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
@@ -75,6 +90,9 @@ if __name__ == '__main__':
     if args.underground_length > 0:
         grid.prevent_empty_along_underground(args.underground_length, edge_mode)
         grid.set_maximum_underground_length(args.underground_length, edge_mode)
+
+    if args.no_parallel:
+        prevent_parallel(grid, edge_mode)
 
 
     if args.single_loop:
