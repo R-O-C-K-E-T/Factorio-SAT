@@ -1,7 +1,6 @@
-from sys import stdin
 from typing import *
 
-import traceback, math, collections, subprocess, shlex, io, tempfile
+import traceback, math, collections, subprocess, shlex, io, tempfile, sys, os
 from os.path import basename
 
 import numpy as np
@@ -632,6 +631,7 @@ def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[VariableT
             line = result.readline()
             if line.startswith('s'):
                 break
+            print(line, file=sys.stderr, end='')
         
         if line.startswith('s UNSATISFIABLE'):
             return None
