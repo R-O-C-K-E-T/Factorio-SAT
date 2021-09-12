@@ -37,6 +37,8 @@ class TestCase:
     tiles: Any
 
     def run(self):
+        underground_length = int(self.params.get('underground-length', 4))
+
         if 'network' in self.params:
             network = open_network(self.params['network'])
             network = deduplicate_network(network)
@@ -44,6 +46,24 @@ class TestCase:
         else:
             grid = Grid(self.tiles.shape[1], self.tiles.shape[0], 1)
             grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
+
+        if 'rules' in self.params:
+            for rule in self.params['rules'].split(','):
+                if rule == 'expand-underground':
+                    belt_balancer.expand_underground(grid, underground_length)
+                elif rule == 'prevent-mergeable-underground':
+                    belt_balancer.prevent_mergeable_underground(grid, underground_length, EDGE_MODE_BLOCK)
+                elif rule == 'glue-splitters':
+                    belt_balancer.glue_splitters(grid)
+                elif rule == 'prevent-belt-hooks':
+                    belt_balancer.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
+                elif rule == 'prevent-small-loops':
+                    grid.prevent_small_loops()
+                else:
+                    raise RuntimeError(f'Unknown rule "{rule}"')
+
+        grid.set_maximum_underground_length(underground_length, EDGE_MODE_BLOCK)
+        
         grid.prevent_intersection(EDGE_MODE_IGNORE)
         for y, row in enumerate(self.tiles):
             for x, tile in enumerate(row):
@@ -133,8 +153,11 @@ def open_suite(filename):
     for name, data in tokens:
         if name == 'open':
             label, params, is_positive = data
-            if is_positive is None:
-                is_positive = stack[-1].is_positive
+            if len(stack) > 0:
+                if is_positive is None:
+                    is_positive = stack[-1].is_positive
+                params = {**stack[-1].params, **params}
+
             stack.append(stack_entry(label, params, is_positive, [], []))
         elif name == 'close':
             last = stack.pop()

@@ -106,7 +106,8 @@ if __name__ == '__main__':
     grid.prevent_small_loops()
     belt_balancer.glue_splitters(grid)
     belt_balancer.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
-    belt_balancer.expand_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
+    belt_balancer.expand_underground(grid, args.underground_length, min_x=1, max_x=grid.width-2)
+    belt_balancer.prevent_mergeable_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
 
     for i in range(int(math.log2(args.size)) - 1):
         grid.clauses += library_equals([tile.level_primary[i] for tile in grid.iterate_tiles()], args.size // 2, grid.pool)

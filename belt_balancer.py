@@ -1,4 +1,5 @@
 from collections import defaultdict
+from re import I
 
 from pysat.card import EncType
 from cardinality import library_atleast, library_equals, quadratic_one, library_equals
@@ -270,15 +271,26 @@ def shrink_underground(grid: Grid, edge_mode: EdgeModeType):
                     -tile_b.underground[direction],
                 ], [set_not_number(0, tile_a.all_direction)])
 
-def expand_underground(grid: Grid, underground_length: int, edge_mode: EdgeModeType):
+def expand_underground(grid: Grid, underground_length: int, min_x: int=0, min_y: int=0, max_x: Optional[int]=None, max_y: Optional[int]=None):
+    if max_x is None:
+        max_x = grid.width - 1
+    if max_y is None:
+        max_y = grid.height - 1
+    
     assert underground_length > 1
-    for x in range(grid.width):
-        for y in range(grid.height):
+    for x in range(min_x, max_x + 1):
+        for y in range(min_y, max_y + 1):
             for direction in range(4):
                 dx, dy = direction_to_vec(direction)
-                tiles = [grid.get_tile_instance_offset(x, y, dx*i, dy*i, edge_mode) for i in range(underground_length + 2)]
-                if any(tile == BLOCKED_TILE or tile == IGNORED_TILE for tile in tiles):
+
+                far_x = x + dx*(underground_length+1)
+                far_y = y + dy*(underground_length+1)
+                if far_x > max_x or far_y > max_y or far_x < min_x or far_y < min_y:
                     continue
+
+                tiles = [grid.get_tile_instance_offset(x, y, dx*i, dy*i, EDGE_MODE_BLOCK) for i in range(underground_length + 2)]
+                if any(tile == BLOCKED_TILE for tile in tiles):
+                    assert False
 
                 # BI--O
                 grid.clauses.append([
@@ -307,7 +319,7 @@ def expand_underground(grid: Grid, underground_length: int, edge_mode: EdgeModeT
                 ])
 
     if underground_length > 2:
-        expand_underground(grid, underground_length-1, edge_mode)
+        expand_underground(grid, underground_length-1, min_x, min_y, max_x, max_y)
 
 def prevent_belt_hooks(grid: Grid, edge_mode: EdgeModeType):
     for x in range(grid.width):
@@ -342,6 +354,37 @@ def prevent_belt_hooks(grid: Grid, edge_mode: EdgeModeType):
                                 *tile10.is_splitter,
                             ])
 
+def get_mergeable_underground_variations(underground_length):
+    if underground_length < 4:
+        return
+    
+    for offset in range(1, underground_length - 2):
+        yield [
+            False, # Start 1
+            *([True] * offset), 
+            False, # End 1
+            False, # Start 2
+            *([True] * (underground_length - offset - 2)),
+            False, # End 2
+        ]
+
+def prevent_mergeable_underground(grid: Grid, underground_length: int, edge_mode: EDGE_MODE_BLOCK):
+    if underground_length < 4:
+        return
+    
+    for x in range(grid.width):
+        for y in range(grid.height):
+            for direction in range(4):
+                dx, dy = direction_to_vec(direction)
+                tiles = [grid.get_tile_instance_offset(x, y, dx*i, dy*i, edge_mode) for i in range(underground_length + 2)]
+                if any(tile == BLOCKED_TILE or tile == IGNORED_TILE for tile in tiles):
+                    continue
+
+                for variation in get_mergeable_underground_variations(underground_length):
+                    grid.clauses.append([-set_variable(tile.underground[direction], is_underground) for tile, is_underground in zip(tiles, variation)])
+
+    prevent_mergeable_underground(grid, underground_length - 1, edge_mode)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
     parser.add_argument('network', type=argparse.FileType('r'), help='Splitter network')
@@ -351,6 +394,7 @@ if __name__ == '__main__':
     parser.add_argument('--edge-belts', action='store_true', help='Prevents two side by side belts at the inputs/outputs of a balancer (weaker version of --edge-splitters)')
     parser.add_argument('--glue-splitters', action='store_true', help='Prevents a configuration where a splitter has two straight input belts. Effectively pushing all splitters as far back as possible')
     parser.add_argument('--expand-underground', action='store_true', help='Ensures that underground belts are expanded if possible')
+    parser.add_argument('--prevent-mergeable-underground', action='store_true', help='Prevent underground segments that can be merged')
     parser.add_argument('--prevent-bad-patterns', action='store_true', help='Prevents patterns of belts that are not helpful, i.e. always substitutable for a simpler configuration.')
     parser.add_argument('--fast', action='store_true', help='Enables all speed improving options')
     parser.add_argument('--aligned', action='store_true', help='Enforces balancer input aligns with output')
@@ -377,7 +421,9 @@ if __name__ == '__main__':
     if args.glue_splitters or args.fast:
         glue_splitters(grid)
     if args.expand_underground or args.fast:
-        expand_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
+        expand_underground(grid, args.underground_length, min_x=1, max_x=grid.width-2)
+    if args.prevent_mergeable_underground or args.fast:
+        prevent_mergeable_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
     if args.prevent_bad_patterns or args.fast:
         prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
         grid.prevent_small_loops()
