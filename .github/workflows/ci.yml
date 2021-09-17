@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2.3.4
+    - name: Setup Python 3.8
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: Cache PyPI
+      uses: actions/cache@v2.1.6
+      with:
+        key: pip-${{ hashFiles('**/requirements.txt') }}
+        path: ~/.cache/pip
+        restore-keys: pip-
+    - name: Install dependencies
+      uses: py-actions/py-dependency-install@v2.1.0
+    - name: Run tests
+      run: python test_runner.py
