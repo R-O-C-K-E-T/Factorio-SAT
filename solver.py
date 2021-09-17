@@ -294,10 +294,14 @@ class Grid(BaseGrid):
                         # Handles special splitter output case
                         for splitter in tile_a.is_splitter:
                             self.clauses += implies([tile_a.input_direction[direction], splitter, *invert_components(tile_b.is_splitter)], [   
-                                [-tile_b.input_direction[(direction + 1) % 4]],
-                                [-tile_b.input_direction[(direction - 1) % 4]],
-                                [tile_b.input_direction[direction], -tile_b.output_direction[(direction + 1) % 4]],
-                                [tile_b.input_direction[direction], -tile_b.output_direction[(direction - 1) % 4]],
+                                [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[(direction + 1) % 4]],
+                                [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[(direction - 1) % 4]],
+
+                                [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[direction]],
+                                [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[direction]],
+
+                                [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction + 1) % 4]],
+                                [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction - 1) % 4]],
                             ])
 
     def prevent_empty_along_underground(self, underground_length: int, edge_mode: EdgeModeType):
