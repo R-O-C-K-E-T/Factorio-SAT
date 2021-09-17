@@ -156,7 +156,7 @@
 └───────┘
 }
 
-[Expand Underground](rules=expand-underground) {
+[Expand Underground](rule=expand-underground) {
     [Valid]+ {
         ┌─────────┐
         │  ↓   D →│
@@ -194,7 +194,7 @@
     }
 }
 
-[Mergeable Underground](rules=prevent-mergeable-underground, underground-length=8) {
+[Mergeable Underground](rule=prevent-mergeable-underground, underground-length=8) {
     [Valid]+ {
         ┌─────┐
         │l ↓ L│
@@ -213,5 +213,47 @@
         ┌─────────────────┐
         │l ↓ L l ↓ L l ↓ L│
         └─────────────────┘
+    }
+}
+
+[Semicircles](rule=prevent-semicircles) {
+    [Valid]+ {
+        ┌─────┐
+        │f   G│
+        │T D h│
+        │→ d →│
+        └─────┘
+        ┌─────┐
+        │f k G│
+        │T → h│
+        │  K  │
+        └─────┘
+        ┌─────┐
+        │f I G│
+        │T → h│
+        │  i  │
+        └─────┘
+    }
+    [Invalid]- {
+        ┌─────┐
+        │f   G│
+        │T → h│
+        └─────┘
+        ┌─────┐
+        │↓   G│
+        │T → h│
+        └─────┘
+        ┌─────┐
+        │f   ↑│
+        │T → h│
+        └─────┘
+        ┌─────┐
+        │↓   ↑│
+        │T → h│
+        └─────┘
+        ┌─────┐
+        │G → f│
+        │h   T│
+        └─────┘
     }
 }

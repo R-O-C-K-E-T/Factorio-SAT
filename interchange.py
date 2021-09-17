@@ -2,6 +2,7 @@ import argparse, json, sys
 
 from solver import Grid, Belt
 from util import *
+import belt_balancer
 
 
 if __name__ == '__main__':
@@ -52,7 +53,9 @@ if __name__ == '__main__':
 
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
     grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
-    grid.prevent_empty_along_underground(args.underground_length, EDGE_MODE_BLOCK)
+
+    belt_balancer.expand_underground(grid, args.underground_length)
+    belt_balancer.apply_canonicalisation(grid, args.underground_length)
     # for tile in grid.iterate_tiles():
     #     grid.clauses += implies(invert_components(tile.all_direction), set_number(0, tile.underground))
     

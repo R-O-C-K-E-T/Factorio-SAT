@@ -101,13 +101,9 @@ if __name__ == '__main__':
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
 
     grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
-    grid.prevent_empty_along_underground(args.underground_length, EDGE_MODE_BLOCK)
 
-    grid.prevent_small_loops()
-    belt_balancer.glue_splitters(grid)
-    belt_balancer.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
     belt_balancer.expand_underground(grid, args.underground_length, min_x=1, max_x=grid.width-2)
-    belt_balancer.prevent_mergeable_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
+    belt_balancer.apply_canonicalisation(grid, args.underground_length)
 
     for i in range(int(math.log2(args.size)) - 1):
         grid.clauses += library_equals([tile.level_primary[i] for tile in grid.iterate_tiles()], args.size // 2, grid.pool)

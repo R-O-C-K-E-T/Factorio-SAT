@@ -41,14 +41,12 @@ def solve_balancer(network, size, solver):
     grid = belt_balancer.create_balancer(network, width, height)
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
     belt_balancer.setup_balancer_ends(grid, network, True)
-    belt_balancer.glue_splitters(grid)
+
     belt_balancer.expand_underground(grid, maximum_underground_length, min_x=1, max_x=grid.width-2)
-    belt_balancer.prevent_mergeable_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
-    belt_balancer.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
-    grid.prevent_small_loops()
+    belt_balancer.apply_canonicalisation(grid, maximum_underground_length)
+
     belt_balancer.enforce_edge_splitters(grid, network)
     grid.set_maximum_underground_length(maximum_underground_length, EDGE_MODE_BLOCK)
-    grid.prevent_empty_along_underground(maximum_underground_length, EDGE_MODE_BLOCK)
     
     solution = grid.solve(solver)
     if solution is None:

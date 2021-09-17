@@ -47,20 +47,22 @@ class TestCase:
             grid = Grid(self.tiles.shape[1], self.tiles.shape[0], 1)
             grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
 
-        if 'rules' in self.params:
-            for rule in self.params['rules'].split(','):
-                if rule == 'expand-underground':
-                    belt_balancer.expand_underground(grid, underground_length)
-                elif rule == 'prevent-mergeable-underground':
-                    belt_balancer.prevent_mergeable_underground(grid, underground_length, EDGE_MODE_BLOCK)
-                elif rule == 'glue-splitters':
-                    belt_balancer.glue_splitters(grid)
-                elif rule == 'prevent-belt-hooks':
-                    belt_balancer.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
-                elif rule == 'prevent-small-loops':
-                    grid.prevent_small_loops()
-                else:
-                    raise RuntimeError(f'Unknown rule "{rule}"')
+        rule = self.params.get('rule')
+        if rule is not None:
+            if rule == 'expand-underground':
+                belt_balancer.expand_underground(grid, underground_length)
+            elif rule == 'prevent-mergeable-underground':
+                belt_balancer.prevent_mergeable_underground(grid, underground_length, EDGE_MODE_BLOCK)
+            elif rule == 'glue-splitters':
+                belt_balancer.glue_splitters(grid)
+            elif rule == 'prevent-belt-hooks':
+                belt_balancer.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
+            elif rule == 'prevent-small-loops':
+                grid.prevent_small_loops()
+            elif rule == 'prevent-semicircles':
+                belt_balancer.prevent_semicircles(grid, EDGE_MODE_BLOCK)
+            else:
+                raise RuntimeError(f'Unknown rule "{rule}"')
 
         grid.set_maximum_underground_length(underground_length, EDGE_MODE_BLOCK)
         

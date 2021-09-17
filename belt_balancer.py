@@ -368,7 +368,7 @@ def get_mergeable_underground_variations(underground_length):
             False, # End 2
         ]
 
-def prevent_mergeable_underground(grid: Grid, underground_length: int, edge_mode: EDGE_MODE_BLOCK):
+def prevent_mergeable_underground(grid: Grid, underground_length: int, edge_mode: EdgeModeType):
     if underground_length < 4:
         return
     
@@ -384,6 +384,47 @@ def prevent_mergeable_underground(grid: Grid, underground_length: int, edge_mode
                     grid.clauses.append([-set_variable(tile.underground[direction], is_underground) for tile, is_underground in zip(tiles, variation)])
 
     prevent_mergeable_underground(grid, underground_length - 1, edge_mode)
+
+def prevent_semicircles(grid: Grid, edge_mode: EdgeModeType):
+    for x in range(grid.width):
+        for y in range(grid.height):
+            for direction in range(4):
+                for tangent in (direction + 1, direction + 3):
+                    tangent %= 4
+                    inverse_tangent = (tangent + 2) % 4
+                    dx0, dy0 = direction_to_vec(direction)
+                    dx1, dy1 = direction_to_vec(tangent)
+
+                    tiles = np.frompyfunc(lambda j, i: grid.get_tile_instance_offset(x, y, dx0*i + dx1*j, dy0*i + dy1*j, edge_mode), 2, 1)(*np.ogrid[0:2, 0:3])
+
+                    if (tiles == BLOCKED_TILE).any() or (tiles == IGNORED_TILE).any():
+                        continue
+
+                    for in_direction in (direction, tangent):
+                        for out_direction in (inverse_tangent, direction):
+                            grid.clauses.append([
+                                -tiles[0,0].input_direction[in_direction],
+
+                                *tiles[0,1].all_direction,
+
+                                -tiles[0,2].input_direction[inverse_tangent],
+                                -tiles[0,2].output_direction[out_direction],
+
+                                -tiles[1,0].input_direction[tangent],
+
+                                -tiles[1,1].input_direction[direction],
+                                *tiles[1,1].is_splitter,
+
+                                -tiles[1,2].input_direction[direction],
+                            ])
+
+def apply_canonicalisation(grid, underground_length):
+    grid.prevent_small_loops()
+    grid.prevent_empty_along_underground(underground_length, EDGE_MODE_BLOCK)
+    glue_splitters(grid)
+    prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
+    prevent_mergeable_underground(grid, underground_length, EDGE_MODE_BLOCK)
+    prevent_semicircles(grid, EDGE_MODE_BLOCK)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
@@ -426,6 +467,7 @@ if __name__ == '__main__':
         prevent_mergeable_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
     if args.prevent_bad_patterns or args.fast:
         prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
+        prevent_semicircles(grid, EDGE_MODE_BLOCK)
         grid.prevent_small_loops()
 
     #setup_balancer_ends_with_offsets(grid, network, 1, 0)#args.start_offset, args.end_offset)

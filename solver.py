@@ -61,11 +61,6 @@ class Grid(BaseGrid):
                     for splitter in tile.is_splitter:
                         self.clauses += implies([splitter, tile.input_direction[direction]], [[-tile.output_direction[(direction + 1) % 4]]])
                     
-                # If tile is empty, then colour is 0
-                self.clauses += implies(invert_components(tile.all_direction),     set_number(0, tile.colour))
-                #self.clauses += implies(invert_components(tile.underground[0::2]), set_number(0, tile.colour_ux))
-                #self.clauses += implies(invert_components(tile.underground[1::2]), set_number(0, tile.colour_uy))
-
                 # Prevent colours beyond end of range
                 for colour_range in (tile.colour, tile.colour_ux, tile.colour_uy):
                     self.clauses += set_maximum(self.colours - 1, colour_range)
