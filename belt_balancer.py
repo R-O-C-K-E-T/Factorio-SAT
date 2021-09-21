@@ -1,5 +1,4 @@
 from collections import defaultdict
-from re import I
 
 from pysat.card import EncType
 from cardinality import library_atleast, library_equals, quadratic_one, library_equals
@@ -418,6 +417,94 @@ def prevent_semicircles(grid: Grid, edge_mode: EdgeModeType):
                                 -tiles[1,2].input_direction[direction],
                             ])
 
+def prevent_underground_hook(grid: Grid, edge_mode: EdgeModeType):
+    # TODO Make sound
+    for x in range(grid.width):
+        for y in range(grid.height):
+            tile_underground_transition = grid.get_tile_instance(x, y)
+            for direction in range(4):
+                dx0, dy0 = direction_to_vec(direction)
+                
+                tile_empty = grid.get_tile_instance_offset(x, y, dx0, dy0, edge_mode)
+                if tile_empty == BLOCKED_TILE or tile_empty == IGNORED_TILE:
+                    continue
+
+                tile_a = grid.get_tile_instance_offset(x, y, -dx0, -dy0, edge_mode)
+                if tile_a == BLOCKED_TILE or tile_a == IGNORED_TILE:
+                    continue
+
+                inv_direction = (direction + 2) % 4
+
+                for tangent in (direction + 1, direction + 3):
+                    tangent %= 4
+                    inv_tangent = (tangent + 2) % 4
+                    dx1, dy1 = direction_to_vec(tangent)
+
+                    tile_b = grid.get_tile_instance_offset(x, y, -dx1 - dx0, -dy1 - dy0, edge_mode)
+                    if tile_b == BLOCKED_TILE or tile_b == IGNORED_TILE:
+                        continue
+                    tile_c = grid.get_tile_instance_offset(x, y, -dx1, -dy1, edge_mode)
+                    if tile_c == BLOCKED_TILE or tile_c == IGNORED_TILE:
+                        continue
+
+                    for in_direction in (inv_direction, tangent):
+                        grid.clauses.append([
+                            *tile_empty.all_direction,
+                            -tile_empty.underground[direction],
+
+                            tile_underground_transition.underground[direction],
+
+                            #-tile_a.output_direction[direction],
+                            -tile_a.input_direction[tangent],
+
+                            #-tile_b.output_direction[tangent],
+                            -tile_b.input_direction[inv_direction],
+
+                            #-tile_c.output_direction[inv_direction],
+                            -tile_c.input_direction[in_direction],
+                            *tile_c.is_splitter,
+                        ])
+
+                    for out_direction in (direction, inv_tangent):
+                        grid.clauses.append([
+                            *tile_empty.all_direction,
+                            -tile_empty.underground[inv_direction],
+
+                            tile_underground_transition.underground[inv_direction],
+
+                            #-tile_a.input_direction[inv_direction],
+                            -tile_a.output_direction[inv_tangent],
+
+                            #-tile_b.input_direction[inv_tangent],
+                            -tile_b.output_direction[direction],
+
+                            #-tile_c.input_direction[direction],
+                            -tile_c.output_direction[out_direction],
+                            *tile_c.is_splitter,
+                        ])
+
+def prevent_zigzags(grid: Grid, edge_mode: EdgeModeType):
+    # TODO Make sound
+    for direction in range(4):
+        for tangent in (direction + 1, direction + 3):
+            tangent %= 4
+            for tiles in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec(tangent), 2, edge_mode):
+                if (tiles == BLOCKED_TILE).any() or (tiles == IGNORED_TILE).any():
+                    continue
+
+                grid.clauses.append([
+                    -tiles[0,0].input_direction[direction],
+                    -tiles[0,0].output_direction[tangent],
+
+                    *tiles[0,1].all_direction,
+
+                    #-tiles[1,0].input_direction[tangent],
+                    -tiles[1,0].output_direction[direction],
+
+                    #tiles[1,1].input_direction[direction],
+                    -tiles[1,1].output_direction[tangent],
+                ])
+
 def apply_canonicalisation(grid, underground_length):
     grid.prevent_small_loops()
     grid.prevent_empty_along_underground(underground_length, EDGE_MODE_BLOCK)
@@ -425,6 +512,8 @@ def apply_canonicalisation(grid, underground_length):
     prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
     prevent_mergeable_underground(grid, underground_length, EDGE_MODE_BLOCK)
     prevent_semicircles(grid, EDGE_MODE_BLOCK)
+    prevent_underground_hook(grid, EDGE_MODE_BLOCK)
+    prevent_zigzags(grid, EDGE_MODE_BLOCK)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')

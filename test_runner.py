@@ -61,6 +61,10 @@ class TestCase:
                 grid.prevent_small_loops()
             elif rule == 'prevent-semicircles':
                 belt_balancer.prevent_semicircles(grid, EDGE_MODE_BLOCK)
+            elif rule == 'prevent-underground-hook':
+                belt_balancer.prevent_underground_hook(grid, EDGE_MODE_BLOCK)
+            elif rule == 'prevent-zigzags':
+                belt_balancer.prevent_zigzags(grid, EDGE_MODE_BLOCK)
             else:
                 raise RuntimeError(f'Unknown rule "{rule}"')
 

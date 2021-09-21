@@ -696,6 +696,18 @@ class BaseGrid:
             for y in range(self.height):
                 yield self.get_tile_instance(x, y)
 
+    def iterate_tile_blocks(self, columnwise_dir: Tuple[int, int], column_count: int, rowwise_dir: Tuple[int, int], row_count: int, edge_mode: EdgeModeType):
+        cx, cy = columnwise_dir
+        rx, ry = rowwise_dir
+        assert abs(cx) + abs(cy) == 1
+        assert abs(rx) + abs(ry) == 1
+        assert column_count > 0
+        assert row_count > 0
+
+        for x in range(self.width):
+            for y in range(self.height):
+                yield np.frompyfunc(lambda i, j: self.get_tile_instance_offset(x, y, rx*i + cx*j, ry*i + cy*j, edge_mode), 2, 1)(*np.ogrid[0:row_count, 0:column_count])
+
     def allocate_variable(self):
         return self.pool._next()
 

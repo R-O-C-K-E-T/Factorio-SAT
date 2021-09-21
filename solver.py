@@ -147,7 +147,6 @@ class Grid(BaseGrid):
         assert 0 <= colour < self.colours
         tile = self.get_tile_instance(x, y)
         self.clauses += set_number(colour, tile.colour)
-        self.clauses += [tile.all_direction]
 
     def prevent_bad_colouring(self, edge_mode: EdgeModeType):
         if self.colours == 1:
