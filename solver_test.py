@@ -103,7 +103,7 @@ class Grid(BaseGrid):
         elif isinstance(tile, Splitter):
             self.clauses += [
                 [tile_instance.is_splitter], 
-                [set_variable(tile_instance.splitter_side, tile.side)], 
+                [set_literal(tile_instance.splitter_side, tile.side)], 
                 [tile_instance.splitter_direction[tile.direction]],
             ]
         elif isinstance(tile, Belt):
@@ -132,7 +132,7 @@ class Grid(BaseGrid):
             for y in range(self.height):
                 tile = self.get_tile_instance(x, y)
                 if colour == 0:
-                    self.clauses += [[-var, *set_not_number(0, tile.colour)] for var in tile.all_direction]
+                    self.clauses += [[-lit, *set_not_number(0, tile.colour)] for lit in tile.all_direction]
                 else:
                     self.clauses += [set_not_number(colour, colour_range) for colour_range in (tile.colour, tile.colour_ux, tile.colour_uy)]
 
@@ -278,7 +278,7 @@ class Grid(BaseGrid):
                             [-tile_a.splitter_direction[direction]],
                         ]
                     elif tile_b != IGNORED_TILE:
-                        self.clauses += variables_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
+                        self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
 
                         # Handles special splitter output case
                         self.clauses += implies([tile_a.splitter_direction[direction], tile_a.is_splitter, -tile_b.is_splitter], [

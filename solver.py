@@ -118,19 +118,19 @@ class Grid(BaseGrid):
         tile_instance = self.get_tile_instance(x, y)
 
         if tile is None:
-            self.clauses += [[-variable] for variable in tile_instance.all_direction + tile_instance.is_splitter]
+            self.clauses += [[-lit] for lit in tile_instance.all_direction + tile_instance.is_splitter]
         elif isinstance(tile, Splitter):
             self.clauses.append([tile_instance.is_splitter[tile.side]])
             self.clauses.append([tile_instance.input_direction[tile.direction], tile_instance.output_direction[tile.direction]])
         elif isinstance(tile, Belt) or isinstance(tile, UndergroundBelt):
             self.clauses += [[-tile_instance.is_splitter[0]], [-tile_instance.is_splitter[1]]]
             if tile.input_direction is None:
-                self.clauses += [[-variable] for variable in tile_instance.input_direction]
+                self.clauses += [[-lit] for lit in tile_instance.input_direction]
             else:
                 self.clauses += [[tile_instance.input_direction[tile.input_direction]]]
 
             if tile.output_direction is None:
-                self.clauses += [[-variable] for variable in tile_instance.output_direction]
+                self.clauses += [[-lit] for lit in tile_instance.output_direction]
             else:
                 self.clauses += [[tile_instance.output_direction[tile.output_direction]]]
     
@@ -139,7 +139,7 @@ class Grid(BaseGrid):
             for y in range(self.height):
                 tile = self.get_tile_instance(x, y)
                 if colour == 0:
-                    self.clauses += [[-var, *set_not_number(0, tile.colour)] for var in tile.all_direction]
+                    self.clauses += [[-lit, *set_not_number(0, tile.colour)] for lit in tile.all_direction]
                 else:
                     self.clauses += [set_not_number(colour, colour_range) for colour_range in (tile.colour, tile.colour_ux, tile.colour_uy)]
 
@@ -284,11 +284,11 @@ class Grid(BaseGrid):
                         self.clauses += [
                             [-tile_a.output_direction[direction]],
                             [-tile_a.input_direction[inv_direction]],
-                            *implies([tile_a.input_direction[direction]],      [[-variable] for variable in tile_a.is_splitter]),
-                            *implies([tile_a.output_direction[inv_direction]], [[-variable] for variable in tile_a.is_splitter]),
+                            *implies([tile_a.input_direction[direction]],      [[-lit] for lit in tile_a.is_splitter]),
+                            *implies([tile_a.output_direction[inv_direction]], [[-lit] for lit in tile_a.is_splitter]),
                         ]
                     elif tile_b != IGNORED_TILE:
-                        self.clauses += variables_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
+                        self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
 
                         # Handles special splitter output case
                         for splitter in tile_a.is_splitter:

@@ -398,11 +398,11 @@ def optimise_colours(network, solver='g3'):
 
     clauses = []
 
-    next_variable = 0
+    next_lit = 0
     def allocate():
-        nonlocal next_variable
-        next_variable += 1
-        return next_variable
+        nonlocal next_lit
+        next_lit += 1
+        return next_lit
     labels = dict((colour, [allocate() for _ in range(length)]) for colour in all_colours)
 
 
@@ -463,11 +463,11 @@ def optimise_colours(network, solver='g3'):
         cost += 1
         
         values = {}
-        for var in model:
-            values[abs(var)] = var > 0
+        for lit in model:
+            values[abs(lit)] = lit > 0
         colour_map = {}
-        for initial_colour, variables in labels.items():
-            colour = read_number([values[var] for var in variables])
+        for initial_colour, literals in labels.items():
+            colour = read_number([values[lit] for lit in literals])
             colour_map[initial_colour] = colour
         
         result_network = remap_colours(network, colour_map)

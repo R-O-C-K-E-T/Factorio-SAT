@@ -129,8 +129,8 @@ class AssemblingMachine(BaseTile):
         return 'AssemblingMachine({}, {})'.format(self.x, self.y)
     __repr__ = __str__
 
-VariableType = int
-ClauseType = List[VariableType]
+LiteralType = int
+ClauseType = List[LiteralType]
 ClauseList = List[ClauseType]
 AllocatorType = Callable[[], int]
 
@@ -176,7 +176,7 @@ EdgeModeEnumType = Literal['EDGE_IGNORE', 'EDGE_BLOCK', 'EDGE_TILE']
 EdgeModeType = Union[Tuple[EdgeModeEnumType, EdgeModeEnumType], EdgeModeEnumType]
 OffsetTileType = Union[Literal['TILE_IGNORE', 'TILE_BLOCK'], 'TileTemplate']
 
-def add_numbers(input_a: List[VariableType], input_b: List[VariableType], output: List[VariableType], allocator: AllocatorType, carry_in: Optional[VariableType]=None, allow_overflow=False) -> ClauseList:
+def add_numbers(input_a: List[LiteralType], input_b: List[LiteralType], output: List[LiteralType], allocator: AllocatorType, carry_in: Optional[LiteralType]=None, allow_overflow=False) -> ClauseList:
     assert len(input_a) == len(input_b)
     assert len(output) in (len(input_a), len(input_a) + 1)
 
@@ -217,12 +217,12 @@ def add_numbers(input_a: List[VariableType], input_b: List[VariableType], output
         carry_in = carry_out
 
     if len(output) > len(input_a):
-        clauses += variables_same(carry_in, output[-1])
+        clauses += literals_same(carry_in, output[-1])
     elif not allow_overflow:
         clauses += [[-carry_in]]
     return clauses
 
-def sum_numbers(numbers: List[List[VariableType]], output: List[VariableType], allocator: AllocatorType, allow_overflow=False) -> ClauseList:
+def sum_numbers(numbers: List[List[LiteralType]], output: List[LiteralType], allocator: AllocatorType, allow_overflow=False) -> ClauseList:
     assert len(numbers) > 1
 
     size = len(numbers[0])
@@ -243,19 +243,19 @@ def sum_numbers(numbers: List[List[VariableType]], output: List[VariableType], a
 
     return clauses
 
-def increment_number(input: List[VariableType], output: List[VariableType]):
+def increment_number(input: List[LiteralType], output: List[LiteralType]):
     assert len(input) == len(output)
     assert len(input) > 0
 
     clauses = []
-    for i, (in_var, out_var) in enumerate(zip(input, output)):
-        clauses += implies(input[:i], variables_different(in_var, out_var))
+    for i, (in_lit, out_lit) in enumerate(zip(input, output)):
+        clauses += implies(input[:i], literals_different(in_lit, out_lit))
 
-        for var in input[:i]:
-            clauses += implies([-var], variables_same(in_var, out_var))
+        for lit in input[:i]:
+            clauses += implies([-lit], literals_same(in_lit, out_lit))
     return clauses
 
-def get_popcount(bits: List[VariableType], output: List[VariableType], allocator: AllocatorType) -> ClauseList:
+def get_popcount(bits: List[LiteralType], output: List[LiteralType], allocator: AllocatorType) -> ClauseList:
     assert bin_length(len(bits) + 1) == len(output)
     assert len(bits) > 1
 
@@ -295,51 +295,51 @@ def direction_to_vec(direction: int) -> Tuple[int, int]:
 def bin_length(value: int):
     return math.ceil(math.log2(value))
 
-def set_variable(var: VariableType, value: bool) -> VariableType:
+def set_literal(lit: LiteralType, value: bool) -> LiteralType:
     if value:
-        return var
+        return lit
     else:
-        return -var
+        return -lit
 
-def set_number(value: int, variables: List[VariableType]) -> ClauseList:
-    assert value < (1 << len(variables))
+def set_number(value: int, literals: List[LiteralType]) -> ClauseList:
+    assert value < (1 << len(literals))
 
     clauses = []
-    for var, bit in zip(variables, get_bits(value, len(variables))):
-        clauses.append([set_variable(var, bit)])
+    for lit, bit in zip(literals, get_bits(value, len(literals))):
+        clauses.append([set_literal(lit, bit)])
     return clauses
 
-def set_numbers(value_a: int, value_b: int, variables_a: List[VariableType], variables_b: List[VariableType]) -> ClauseList:
+def set_numbers(value_a: int, value_b: int, literals_a: List[LiteralType], literals_b: List[LiteralType]) -> ClauseList:
     # One set of variables is set to value_a, the other is set to value_b
-    assert len(variables_a) == len(variables_b)
-    total_bits = len(variables_a)
+    assert len(literals_a) == len(literals_b)
+    total_bits = len(literals_a)
     assert value_a < (1 << total_bits)
     assert value_b < (1 << total_bits)
 
     clauses = []
     differences = []
-    for var_a, var_b, bit_a, bit_b in zip(variables_a, variables_b, get_bits(value_a, total_bits), get_bits(value_b, total_bits)):
+    for lit_a, lit_b, bit_a, bit_b in zip(literals_a, literals_b, get_bits(value_a, total_bits), get_bits(value_b, total_bits)):
         if bit_a == bit_b:
-            clauses.append([set_variable(var_a, bit_a)])
-            clauses.append([set_variable(var_b, bit_a)])
+            clauses.append([set_literal(lit_a, bit_a)])
+            clauses.append([set_literal(lit_b, bit_a)])
         else:
-            clauses += variables_different(var_a, var_b)
-            differences.append((var_a, var_b, bit_a))
+            clauses += literals_different(lit_a, lit_b)
+            differences.append((lit_a, lit_b, bit_a))
 
     if len(differences) != 0:
-        var_a0, var_b0, bit_a0 = differences[0]
-        #clauses += variables_different(var_a0, var_b0)
-        for var_a1, var_b1, bit_a1 in differences[1:]:
+        lit_a0, lit_b0, bit_a0 = differences[0]
+        #clauses += literals_different(lit_a0, lit_b0)
+        for lit_a1, lit_b1, bit_a1 in differences[1:]:
             if bit_a0 == bit_a1: # Bits are correlated
-                clauses += variables_same(var_a0, var_a1)
-                #clauses += variables_different(var_a0, var_b1)
+                clauses += literals_same(lit_a0, lit_a1)
+                #clauses += literals_different(lit_a0, lit_b1)
             else: # Anti-correlated
-                clauses += variables_different(var_a0, var_a1)
-                #clauses += variables_same(var_a0, var_b1)
+                clauses += literals_different(lit_a0, lit_a1)
+                #clauses += literals_same(lit_a0, lit_b1)
 
     return clauses
 
-def set_numbers_equal(number_a: List[VariableType], number_b: List[VariableType], allow_different_lengths: bool=False) -> ClauseList:
+def set_numbers_equal(number_a: List[LiteralType], number_b: List[LiteralType], allow_different_lengths: bool=False) -> ClauseList:
     clauses = []
 
     if allow_different_lengths:
@@ -348,67 +348,67 @@ def set_numbers_equal(number_a: List[VariableType], number_b: List[VariableType]
     else:
         assert len(number_a) == len(number_b)
     
-    for var_a, var_b in zip(number_a, number_b):
-        clauses += variables_same(var_a, var_b)
+    for lit_a, lit_b in zip(number_a, number_b):
+        clauses += literals_same(lit_a, lit_b)
     return clauses
 
-def set_not_number(value: int, variables: List[VariableType]) -> ClauseType:
-    return [-var[0] for var in set_number(value, variables)]
+def set_not_number(value: int, literals: List[LiteralType]) -> ClauseType:
+    return [-lit[0] for lit in set_number(value, literals)]
 
-def set_maximum(value: int, variables: List[VariableType]):
-    if len(variables) == 0:
+def set_maximum(value: int, literals: List[LiteralType]):
+    if len(literals) == 0:
         assert value == 0
         return []
     
-    tail = variables[1:]
+    tail = literals[1:]
     clauses = set_maximum(value >> 1, tail)
     if not (value & 1):
-        clause = [-variables[0]]
-        for bit, var in zip(get_bits(value >> 1, len(tail)), tail):
+        clause = [-literals[0]]
+        for bit, lit in zip(get_bits(value >> 1, len(tail)), tail):
             if bit:
-                clause.append(-var)
+                clause.append(-lit)
         clauses.append(clause)
     return clauses
 
-def invert_number(input: List[VariableType], output: List[VariableType], allocator: AllocatorType):
+def invert_number(input: List[LiteralType], output: List[LiteralType], allocator: AllocatorType):
     assert len(input) == len(output)
 
     clauses = []
 
     carry_in = None
-    for i, (var_a, var_b) in enumerate(zip(input, output)):
+    for i, (lit_a, lit_b) in enumerate(zip(input, output)):
         if i == len(input) - 1:
             carry_out = None
         else:
             carry_out = allocator()
         
         if carry_in is None:
-            clauses += variables_same(var_a, var_b)
+            clauses += literals_same(lit_a, lit_b)
             if carry_out is not None:
                 clauses += [
-                    [-var_a, -var_b, carry_out],
+                    [-lit_a, -lit_b, carry_out],
 
-                    [var_a, -carry_out],
-                    [var_b, -carry_out],
+                    [lit_a, -carry_out],
+                    [lit_b, -carry_out],
                 ]
         else:
             clauses += [
-                [-var_a, -var_b, -carry_in],
+                [-lit_a, -lit_b, -carry_in],
 
-                [-var_a, +var_b, +carry_in],
-                [+var_a, -var_b, +carry_in],
-                [+var_a, +var_b, -carry_in],
+                [-lit_a, +lit_b, +carry_in],
+                [+lit_a, -lit_b, +carry_in],
+                [+lit_a, +lit_b, -carry_in],
             ]
 
             if carry_out is not None:
                 clauses += [
-                    [-var_a, -var_b,    carry_out],
-                    [-var_a, -carry_in, carry_out],
-                    [-var_b, -carry_in, carry_out],
+                    [-lit_a, -lit_b,    carry_out],
+                    [-lit_a, -carry_in, carry_out],
+                    [-lit_b, -carry_in, carry_out],
 
-                    [var_a, var_b,    -carry_out],
-                    [var_a, carry_in, -carry_out],
-                    [var_b, carry_in, -carry_out],
+                    [lit_a, lit_b,    -carry_out],
+                    [lit_a, carry_in, -carry_out],
+                    [lit_b, carry_in, -carry_out],
                 ]
         carry_in = carry_out
 
@@ -424,20 +424,20 @@ def get_bits(value: int, total_bits: int) -> Generator[bool, None, None]:
     for bit in range(total_bits):
         yield bool(value & (1<<bit))
 
-def implies(condition: List[VariableType], consequences: ClauseList) -> ClauseList:
+def implies(condition: List[LiteralType], consequences: ClauseList) -> ClauseList:
     # If all the input variables are the correct value then the consequences must be satisfied
-    inverse_condition = [-var for var in condition]
+    inverse_condition = [-lit for lit in condition]
     return [inverse_condition + consequence for consequence in consequences]
 
-def variables_different(var_a: VariableType, var_b: VariableType) -> ClauseList:
-    return [[var_a, var_b], [-var_a, -var_b]]
+def literals_different(lit_a: LiteralType, lit_b: LiteralType) -> ClauseList:
+    return [[lit_a, lit_b], [-lit_a, -lit_b]]
 
-def variables_same(var_a: VariableType, var_b: VariableType) -> ClauseList:
-    return [[-var_a, var_b], [var_a, -var_b]]
+def literals_same(lit_a: LiteralType, lit_b: LiteralType) -> ClauseList:
+    return [[-lit_a, lit_b], [lit_a, -lit_b]]
 
 def invert_components(clause: ClauseType) -> ClauseType:
     # Converts c0 OR c1 OR c2 OR ... to NOT (c0 AND c1 AND c2 AND ...)
-    return [-var for var in clause]
+    return [-lit for lit in clause]
 
 def product(values):
     result = 1
@@ -624,7 +624,7 @@ def expand_edge_mode(edge_mode: EdgeModeType) -> Tuple[EdgeModeEnumType, EdgeMod
     else:
         return edge_mode
 
-def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[VariableType]]:
+def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[LiteralType]]:
     def interpret_solver_answer(stdout):
         result = io.TextIOWrapper(stdout)
         while True:
@@ -790,7 +790,7 @@ class BaseGrid:
                 variables = solution[1:(self.total_variables + 1)]
                 yield np.array(self.template.parse(variables)).reshape((self.height, self.width)).T    
 
-                s.add_clause([set_variable(var, not solution[var]) for var in important_variables])
+                s.add_clause([set_literal(var, not solution[var]) for var in important_variables])
         elif solver.startswith('cmd:'):
             solution = run_command_solver(solver[4:], self.clauses)
             if solution is None:
@@ -808,7 +808,7 @@ class BaseGrid:
                     solution = s.get_model()
                     yield self.parse_solution(solution)
                     
-                    s.add_clause([-var for var in solution if abs(var) in important_variables])
+                    s.add_clause([-lit for lit in solution if abs(lit) in important_variables])
 
     def write(self, filename, comments=None):
         cnf = CNF(from_clauses=self.clauses)

@@ -88,10 +88,10 @@ class IPASIRSolver:
         self.check_closed()
         
         model = []
-        for variable in self.variables:
-            value = self.lib.ipasir_val(self.solver_p, variable)
+        for var in self.variables:
+            value = self.lib.ipasir_val(self.solver_p, var)
             if value == 0:
-                value = variable
+                value = var
             model.append(value)
         return model
 

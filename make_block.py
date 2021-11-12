@@ -10,7 +10,7 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
             tile_a = grid.get_tile_instance(x, y)
 
             if x == 0 and y == 0:
-                grid.clauses += [[-var] for var in tile_a.colour]
+                grid.clauses += [[-lit] for lit in tile_a.colour]
             else:
                 grid.clauses.append(tile_a.colour)
 
@@ -37,8 +37,8 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
                 grid.clauses += implies([tile_a.input_direction[direction], *invert_components(tile_a.output_direction)], increment_number(tile_a.colour, colour_b))
 
                 for i in range(len(tile_a.colour)):
-                    grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]], variables_same(colour_a[i], tile_b.colour[i]))
-                    grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], variables_same(colour_a[i], colour_b[i]))  
+                    grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]], literals_same(colour_a[i], tile_b.colour[i]))
+                    grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], literals_same(colour_a[i], colour_b[i]))  
 
 def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
     for x in range(grid.width):

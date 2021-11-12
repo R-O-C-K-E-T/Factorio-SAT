@@ -167,29 +167,29 @@ class Grid(BaseGrid):
                 if tile_b == BLOCKED_TILE:
                     self.clauses += [[-tile_a.assembling_x[1]], [-tile_a.assembling_x[0]]]
                 elif tile_b != IGNORED_TILE:
-                    self.clauses += variables_same(tile_a.assembling_x[1], tile_b.assembling_x[2])
+                    self.clauses += literals_same(tile_a.assembling_x[1], tile_b.assembling_x[2])
                     for i in range(3):
-                        self.clauses += implies([tile_a.is_assembling_machine, tile_b.is_assembling_machine], variables_same(tile_a.assembling_y[i], tile_b.assembling_y[i]))
+                        self.clauses += implies([tile_a.is_assembling_machine, tile_b.is_assembling_machine], literals_same(tile_a.assembling_y[i], tile_b.assembling_y[i]))
 
                 tile_b = self.get_tile_instance_offset(x, y, -1,  0, edge_mode)
                 if tile_b == BLOCKED_TILE:
                     self.clauses += [[-tile_a.assembling_x[1]], [-tile_a.assembling_x[2]]]
                 elif tile_b != IGNORED_TILE:
-                    self.clauses += variables_same(tile_a.assembling_x[1], tile_b.assembling_x[0])
+                    self.clauses += literals_same(tile_a.assembling_x[1], tile_b.assembling_x[0])
                     for i in range(3):
-                        self.clauses += implies([tile_a.is_assembling_machine, tile_b.is_assembling_machine], variables_same(tile_a.assembling_y[i], tile_b.assembling_y[i]))
+                        self.clauses += implies([tile_a.is_assembling_machine, tile_b.is_assembling_machine], literals_same(tile_a.assembling_y[i], tile_b.assembling_y[i]))
                 
                 tile_b = self.get_tile_instance_offset(x, y,  0, +1, edge_mode)
                 if tile_b == BLOCKED_TILE:
                     self.clauses += [[-tile_a.assembling_y[1]], [-tile_a.assembling_y[0]]]
                 elif tile_b != IGNORED_TILE:
-                    self.clauses += variables_same(tile_a.assembling_y[1], tile_b.assembling_y[2])
+                    self.clauses += literals_same(tile_a.assembling_y[1], tile_b.assembling_y[2])
 
                 tile_b = self.get_tile_instance_offset(x, y,  0, -1, edge_mode)
                 if tile_b == BLOCKED_TILE:
                     self.clauses += [[-tile_a.assembling_y[1]], [-tile_a.assembling_y[2]]]
                 elif tile_b != IGNORED_TILE:
-                    self.clauses += variables_same(tile_a.assembling_y[1], tile_b.assembling_y[0])
+                    self.clauses += literals_same(tile_a.assembling_y[1], tile_b.assembling_y[0])
 
     def prevent_intersection(self, edge_mode: EdgeModeType):
         for x in range(self.width):
@@ -208,7 +208,7 @@ class Grid(BaseGrid):
                             [-tile_a.colour_direction[inv_direction]]
                         ]
                     elif tile_b != IGNORED_TILE:
-                        self.clauses += variables_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
+                        self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
 
                         # Handles special output case where there is no output flow, but the belt/splitter is pointing into an invalid tile
                         self.clauses += implies([tile_a.colour_direction[direction]], [   
@@ -394,7 +394,7 @@ class Grid(BaseGrid):
                         consequences = []
                         for side in range(2):
                             # Amount taken from source is equal to amount dropped
-                            consequences += invert_number(tile_a.flow_placed[side][inserter_type][direction], tile_c.flow_placed[side][inserter_type][inv_direction], self.allocate_variable)
+                            consequences += invert_number(tile_a.flow_placed[side][inserter_type][direction], tile_c.flow_placed[side][inserter_type][inv_direction], self.allocate_literal)
                             
                             # Amount dropped is not negative
                             consequences.append([-tile_c.flow_placed[side][inserter_type][inv_direction][-1]])
@@ -425,7 +425,7 @@ class Grid(BaseGrid):
                             self.clauses += implies([-tile_b.inserter_direction[direction], -tile_b.inserter_direction[(direction + 2) % 4]], blocking_clauses)
 
     def enforce_flow_summation(self, edge_mode: EdgeModeType):
-        always_true = self.allocate_variable()
+        always_true = self.allocate_literal()
         self.clauses.append([always_true])
 
         for x in range(self.width):
@@ -439,7 +439,7 @@ class Grid(BaseGrid):
                     for inserter_type in range(2):
                         for direction in range(4):
                             source_numbers.append(tile.flow_placed[side][inserter_type][direction])
-                    consequences += sum_numbers(source_numbers, [*tile.flow_out[side], -always_true], self.allocate_variable, True)
+                    consequences += sum_numbers(source_numbers, [*tile.flow_out[side], -always_true], self.allocate_literal, True)
                 self.clauses += implies([-tile.is_assembling_machine, -tile.is_splitter[0], -tile.is_splitter[1]], consequences)
 
 
@@ -453,8 +453,8 @@ class Grid(BaseGrid):
                         continue
 
                     for side in range(2):
-                        self.clauses += implies([tile_a.is_splitter[0]], add_numbers(tile_a.flow_in[side],  tile_b.flow_in[side],  tile_a.flow_splitter[side], self.allocate_variable))
-                        self.clauses += implies([tile_a.is_splitter[0]], add_numbers(tile_a.flow_out[side], tile_b.flow_out[side], tile_a.flow_splitter[side], self.allocate_variable))
+                        self.clauses += implies([tile_a.is_splitter[0]], add_numbers(tile_a.flow_in[side],  tile_b.flow_in[side],  tile_a.flow_splitter[side], self.allocate_literal))
+                        self.clauses += implies([tile_a.is_splitter[0]], add_numbers(tile_a.flow_out[side], tile_b.flow_out[side], tile_a.flow_splitter[side], self.allocate_literal))
 
     def enforce_insertion_side(self):
         for x in range(self.width):

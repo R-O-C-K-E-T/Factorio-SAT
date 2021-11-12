@@ -104,16 +104,16 @@ def compute_assembler_properties(recipe_map, amounts, max_belt_flowrate):
 
     return raw_inputs, products, maximum_flow, assemblers, item_unit_size
 
-def numbers_add_to(value: int, variables_a: List[VariableType], variables_b: List[VariableType]) -> ClauseList:
-    assert len(variables_a) == len(variables_b)
+def numbers_add_to(value: int, literals_a: List[LiteralType], literals_b: List[LiteralType]) -> ClauseList:
+    assert len(literals_a) == len(literals_b)
 
-    assert value < (1 << (len(variables_a) + 1))
+    assert value < (1 << (len(literals_a) + 1))
 
     clauses = []
-    for value_a in range(1 << len(variables_a)):
-        for value_b in range(1 << len(variables_b)):
+    for value_a in range(1 << len(literals_a)):
+        for value_b in range(1 << len(literals_b)):
             if value_a + value_b != value:
-                clauses.append(set_not_number(value_a, variables_a) + set_not_number(value_b, variables_b))
+                clauses.append(set_not_number(value_a, literals_a) + set_not_number(value_b, literals_b))
     return clauses
 
 if __name__ == '__main__':
@@ -223,20 +223,20 @@ if __name__ == '__main__':
             grid.clauses.append([tile.is_empty])
 
     edge_tiles = [(x, y) for y in range(1, grid.height - 1) for x in (0, grid.width - 1)] + [(x, y) for x in range(1, grid.width - 1) for y in (0, grid.height - 1)]
-    output_variables = [[grid.allocate_variable() for _ in edge_tiles] for _ in products]
-    input_variables = [[grid.allocate_variable() for _ in edge_tiles] for _ in raw_inputs]
+    output_literals = [[grid.allocate_literal() for _ in edge_tiles] for _ in products]
+    input_literals = [[grid.allocate_literal() for _ in edge_tiles] for _ in raw_inputs]
 
-    for pos, variables in zip(edge_tiles, zip(*output_variables, *input_variables)):
+    for pos, literals in zip(edge_tiles, zip(*output_literals, *input_literals)):
         tile = grid.get_tile_instance(*pos)
-        grid.clauses += quadratic_amo(variables)
-        grid.clauses += implies([tile.is_empty], set_number(0, variables))
-        grid.clauses += implies(invert_components(variables), [[tile.is_empty]])
+        grid.clauses += quadratic_amo(literals)
+        grid.clauses += implies([tile.is_empty], set_number(0, literals))
+        grid.clauses += implies(invert_components(literals), [[tile.is_empty]])
 
 
-    for (item, flow), variable_set in zip(raw_inputs.items(), input_variables):
+    for (item, flow), literal_set in zip(raw_inputs.items(), input_literals):
         colour = colour_mapping[item]
-        grid.clauses += quadratic_one(variable_set)
-        for (x, y), var in zip(edge_tiles, variable_set):
+        grid.clauses += quadratic_one(literal_set)
+        for (x, y), lit in zip(edge_tiles, literal_set):
             tile = grid.get_tile_instance(x, y)
             if x == 0:
                 direction = 0
@@ -249,7 +249,7 @@ if __name__ == '__main__':
             else:
                 assert False
 
-            grid.clauses += implies([var], [
+            grid.clauses += implies([lit], [
                 [tile.is_belt], 
                 [tile.output_direction[direction]], 
                 [tile.input_direction[direction]],
@@ -258,10 +258,10 @@ if __name__ == '__main__':
                 *set_number(colour, tile.colour[1]),
             ])
 
-    for (item, flow), variable_set in zip(products.items(), output_variables):
+    for (item, flow), literal_set in zip(products.items(), output_literals):
         colour = colour_mapping[item]
-        grid.clauses += quadratic_one(variable_set)
-        for (x, y), var in zip(edge_tiles, variable_set):
+        grid.clauses += quadratic_one(literal_set)
+        for (x, y), lit in zip(edge_tiles, literal_set):
             tile = grid.get_tile_instance(x, y)
             if x == 0:
                 direction = 2
@@ -274,7 +274,7 @@ if __name__ == '__main__':
             else:
                 assert False
 
-            grid.clauses += implies([var], [
+            grid.clauses += implies([lit], [
                 [tile.is_belt], 
                 [tile.output_direction[direction]],
                 [tile.input_direction[direction]],
