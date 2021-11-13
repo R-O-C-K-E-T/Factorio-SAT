@@ -87,9 +87,8 @@ def decode_char(character):
     return INV_MAPPING[character]
 
 def encode(grid):
-    # char_grid = np.full((grid.shape[1] + 2, grid.shape[0] + 2), ' ', dtype='<U1')
-    char_grid = np.full((grid.shape[1] + 2, 2*grid.shape[0] + 1), ' ', dtype='<U1')
-    char_grid[1:-1,1:-1:2] = encode_tile(grid).T
+    char_grid = np.full((grid.shape[0] + 2, 2*grid.shape[1] + 1), ' ', dtype='<U1')
+    char_grid[1:-1,1:-1:2] = encode_tile(grid)
     
     # raw_print(style_seq(bold=True))
 
@@ -122,9 +121,9 @@ if __name__ == '__main__':
     if args.mode == 'encode':
         while True:
             tiles = np.array(json.loads(input()))
-            for i, row in enumerate(tiles):
-                for j, entry in enumerate(row):
-                    tiles[i, j] = read_tile(entry)
+            for y, row in enumerate(tiles):
+                for x, entry in enumerate(row):
+                    tiles[y, x] = read_tile(entry)
             
             print(encode(tiles))
     else:
@@ -135,8 +134,7 @@ if __name__ == '__main__':
                 if lines[-1].endswith(END_STOP):
                     break
             grid = decode(lines)
-            for i, row in enumerate(grid):
-                for j, tile in enumerate(row):
-                    grid[i, j] = write_tile_simple(tile)
-            grid = grid.T
+            for y, row in enumerate(grid):
+                for x, tile in enumerate(row):
+                    grid[y, x] = write_tile_simple(tile)
             print(json.dumps(grid.tolist()))

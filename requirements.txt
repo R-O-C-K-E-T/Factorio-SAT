@@ -1,6 +1,5 @@
 numpy
 python-sat
-pycryptosat
 luaparser
 pygame
 pillow

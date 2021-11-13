@@ -3,29 +3,39 @@ from typing import *
 
 import numpy as np
 
+from template import *
 from util import *
 
-class Grid(BaseGrid):
-    def __init__(self, width: int, height: int, colours: int, extras: Optional[TileTemplate]=None):
+
+class TileTemplate(Protocol):
+    input_direction: List[LiteralType]
+    output_direction: List[LiteralType]
+    all_direction: List[LiteralType]
+    is_splitter: List[LiteralType]
+    underground: List[LiteralType]
+    colour: List[LiteralType]
+    colour_ux: List[LiteralType]
+    colour_uy: List[LiteralType]
+
+class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
+    def __init__(self, width: int, height: int, colours: int, extras: CompositeTemplateParams={}, pool: Optional[IDPool]=None):
         assert colours >= 1
         self.colours = colours
 
         self.colour_bits = bin_length(colours)
 
-        template = TileTemplate({
-            'input_direction'  : 'one_hot 4', 
-            'output_direction' : 'one_hot 4',
-            'all_direction'    : 'alias input_direction output_direction',
-            'is_splitter'      : 'one_hot 2',
-            'underground'      : 'arr 4', 
-            'colour'           : 'num ' + str(self.colour_bits),
-            'colour_ux'        : 'num ' + str(self.colour_bits),
-            'colour_uy'        : 'num ' + str(self.colour_bits),
+        template = CompositeTemplate({
+            'input_direction'  : OneHotTemplate(4), 
+            'output_direction' : OneHotTemplate(4), 
+            'all_direction'    : lambda input_direction, output_direction: [*input_direction, *output_direction],
+            'is_splitter'      : OneHotTemplate(2), 
+            'underground'      : ArrayTemplate(BoolTemplate(), (4,)),
+            'colour'           : NumberTemplate(self.colour_bits),
+            'colour_ux'        : NumberTemplate(self.colour_bits),
+            'colour_uy'        : NumberTemplate(self.colour_bits),
+            **extras,
         })
-
-        if extras is not None:
-            template = template.merge(extras)
-        super().__init__(template, width, height)
+        super().__init__(template, width, height, pool)
         
         for y in range(height):
             for x in range(width):
@@ -303,72 +313,6 @@ class Grid(BaseGrid):
                                 [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction - 1) % 4]],
                             ])
 
-    def prevent_empty_along_underground(self, underground_length: int, edge_mode: EdgeModeType):
-        for direction in range(4):
-            dx, dy = direction_to_vec(direction)
-            for x in range(self.width):
-                for y in range(self.height):
-                    tiles = [self.get_tile_instance(x, y)]
-                    for i in range(1, underground_length+2):
-                        new_tile = self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
-                        if new_tile in (BLOCKED_TILE, IGNORED_TILE):
-                            break
-
-                        tiles.append(new_tile)
-                        
-                        start, *middle, end = tiles
-                        if len(middle) > 0:
-                            clause = [
-                                -start.input_direction[direction],
-                                *start.output_direction
-                            ]
-
-                            for tile in middle:
-                                clause += tile.all_direction
-                            
-                            clause += [
-                                *end.input_direction,
-                                -end.output_direction[direction],
-                            ]
-
-                            self.clauses.append(clause)
-
-    def prevent_small_loops(self):
-        for x in range(self.width-1):
-            for y in range(self.height-1):
-                tile00 = self.get_tile_instance(x+0, y+0)
-                tile01 = self.get_tile_instance(x+0, y+1)
-                tile10 = self.get_tile_instance(x+1, y+0)
-                tile11 = self.get_tile_instance(x+1, y+1)
-
-                self.clauses.append([
-                    -tile00.input_direction[2],
-                    -tile00.output_direction[3],
-
-                    -tile01.input_direction[3],
-                    -tile01.output_direction[0],
-
-                    -tile11.input_direction[0],
-                    -tile11.output_direction[1],
-
-                    -tile10.input_direction[1],
-                    -tile10.output_direction[2],
-                ])
-
-                self.clauses.append([
-                    -tile00.input_direction[1],
-                    -tile00.output_direction[0],
-
-                    -tile10.input_direction[0],
-                    -tile10.output_direction[3],
-
-                    -tile11.input_direction[3],
-                    -tile11.output_direction[2],
-
-                    -tile01.input_direction[2],
-                    -tile01.output_direction[1],
-                ])
-
     def itersolve(self, ignore_colour=False, solver='g3'):
         important_variables = set()
         for x in range(self.width):
@@ -380,8 +324,3 @@ class Grid(BaseGrid):
                 if not ignore_colour:
                     important_variables |= set(tile.colour + tile.colour_ux + tile.colour_uy)
         return super().itersolve(important_variables, solver)
-
-BELT_TILES = [Belt(direction, (direction + curve) % 4) for direction in range(4) for curve in range(-1, 2)]
-UNDERGROUND_TILES = [UndergroundBelt(direction, type) for direction in range(4) for type in range(2)]
-SPLITTER_TILES = [Splitter(direction, i) for direction in range(4) for i in range(2)]
-ALL_TILES = [None] + BELT_TILES + UNDERGROUND_TILES + SPLITTER_TILES

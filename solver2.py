@@ -4,52 +4,50 @@ from typing import *
 import numpy as np
 
 from util import *
+from template import *
 
 # TODO Remove
 import sys
 
-class Grid(BaseGrid):
-    def __init__(self, width: int, height: int, colour_bits: int, flow_bits: int, extras: Optional[TileTemplate]=None):
+class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
+    def __init__(self, width: int, height: int, colour_bits: int, flow_bits: int, extras: CompositeTemplateParams={}):
         assert width > 0 and height > 0 and colour_bits >= 0 and flow_bits > 0
-        template = TileTemplate({
-            'is_empty'              : 'bool',
-            'is_belt'               : 'bool',
-            'is_underground_in'     : 'bool',
-            'is_underground_out'    : 'bool',
-            'is_underground'        : 'alias is_underground_in is_underground_out', 
-            'is_splitter'           : 'one_hot 2',
-            'is_inserter'           : 'one_hot 2',
-            'is_assembling_machine' : 'bool',
-            'type'                  : 'alias is_empty is_belt is_underground is_splitter is_inserter is_assembling_machine',
+        template = CompositeTemplate({
+            'is_empty'              : BoolTemplate(),
+            'is_belt'               : BoolTemplate(),
+            'is_underground_in'     : BoolTemplate(),
+            'is_underground_out'    : BoolTemplate(),
+            'is_underground'        : lambda is_underground_in, is_underground_out: [is_underground_in, is_underground_out], 
+            'is_splitter'           : OneHotTemplate(2),
+            'is_inserter'           : OneHotTemplate(2),
+            'is_assembling_machine' : BoolTemplate(),
+            'type'                  : lambda is_empty, is_belt, is_underground, is_splitter, is_inserter, is_assembling_machine: [is_empty, is_belt, *is_underground, *is_splitter, *is_inserter, is_assembling_machine],
 
-            'assembling_x'          : 'one_hot 3',
-            'assembling_y'          : 'one_hot 3',
+            'assembling_x'          : OneHotTemplate(3),
+            'assembling_y'          : OneHotTemplate(3),
 
-            'input_direction'       : 'one_hot 4',
-            'output_direction'      : 'one_hot 4',
-            'all_direction'         : 'alias input_direction output_direction',
-            'colour_direction'      : 'one_hot 4',
-            'inserter_direction'    : 'one_hot 4',
+            'input_direction'       : OneHotTemplate(4),
+            'output_direction'      : OneHotTemplate(4),
+            'all_direction'         : lambda input_direction, output_direction: [*input_direction, *output_direction],
+            'colour_direction'      : OneHotTemplate(4),
+            'inserter_direction'    : OneHotTemplate(4),
 
-            'underground'           : 'arr 4',
+            'underground'           : ArrayTemplate(BoolTemplate(), (4,)),
 
-            'colour'                : f'num 2 {colour_bits}',
-            'colour_ux'             : f'num 2 {colour_bits}',
-            'colour_uy'             : f'num 2 {colour_bits}',
+            'colour'                : ArrayTemplate(NumberTemplate(colour_bits), (2,)),
+            'colour_ux'             : ArrayTemplate(NumberTemplate(colour_bits), (2,)),
+            'colour_uy'             : ArrayTemplate(NumberTemplate(colour_bits), (2,)),
             
-            'flow_in'               : f'num 2 {flow_bits}',
-            'flow_placed'           : f'signed_num 2 2 4 {flow_bits + 1}', # (side,inserter_type,direction)
-            'flow_out'              : f'num 2 {flow_bits}',
+            'flow_in'               : ArrayTemplate(NumberTemplate(flow_bits), (2,)),
+            'flow_placed'           : ArrayTemplate(NumberTemplate(flow_bits + 1, is_signed=True), (2,2,4)), # (side,inserter_type,direction)
+            'flow_out'              : ArrayTemplate(NumberTemplate(flow_bits), (2,)),
 
-            'flow_splitter'         : f'num 2 {flow_bits + 1}', # Prevents overflow
+            'flow_splitter'         : ArrayTemplate(NumberTemplate(flow_bits + 1), (2,)), # Prevents overflow
 
-            'flow_ux'               : f'num 2 {flow_bits}',
-            'flow_uy'               : f'num 2 {flow_bits}',
+            'flow_ux'               : ArrayTemplate(NumberTemplate(flow_bits), (2,)),
+            'flow_uy'               : ArrayTemplate(NumberTemplate(flow_bits), (2,)),
+            **extras,
         })
-
-        if extras is not None:
-            template = template.merge(extras)
-
         super().__init__(template, width, height)
 
         for x0 in range(self.width):
@@ -394,7 +392,7 @@ class Grid(BaseGrid):
                         consequences = []
                         for side in range(2):
                             # Amount taken from source is equal to amount dropped
-                            consequences += invert_number(tile_a.flow_placed[side][inserter_type][direction], tile_c.flow_placed[side][inserter_type][inv_direction], self.allocate_literal)
+                            consequences += invert_number(tile_a.flow_placed[side][inserter_type][direction], tile_c.flow_placed[side][inserter_type][inv_direction], self.allocate_variable)
                             
                             # Amount dropped is not negative
                             consequences.append([-tile_c.flow_placed[side][inserter_type][inv_direction][-1]])
@@ -425,7 +423,7 @@ class Grid(BaseGrid):
                             self.clauses += implies([-tile_b.inserter_direction[direction], -tile_b.inserter_direction[(direction + 2) % 4]], blocking_clauses)
 
     def enforce_flow_summation(self, edge_mode: EdgeModeType):
-        always_true = self.allocate_literal()
+        always_true = self.allocate_variable()
         self.clauses.append([always_true])
 
         for x in range(self.width):
@@ -439,7 +437,7 @@ class Grid(BaseGrid):
                     for inserter_type in range(2):
                         for direction in range(4):
                             source_numbers.append(tile.flow_placed[side][inserter_type][direction])
-                    consequences += sum_numbers(source_numbers, [*tile.flow_out[side], -always_true], self.allocate_literal, True)
+                    consequences += sum_numbers(source_numbers, [*tile.flow_out[side], -always_true], self.allocate_variable, True)
                 self.clauses += implies([-tile.is_assembling_machine, -tile.is_splitter[0], -tile.is_splitter[1]], consequences)
 
 
@@ -453,8 +451,8 @@ class Grid(BaseGrid):
                         continue
 
                     for side in range(2):
-                        self.clauses += implies([tile_a.is_splitter[0]], add_numbers(tile_a.flow_in[side],  tile_b.flow_in[side],  tile_a.flow_splitter[side], self.allocate_literal))
-                        self.clauses += implies([tile_a.is_splitter[0]], add_numbers(tile_a.flow_out[side], tile_b.flow_out[side], tile_a.flow_splitter[side], self.allocate_literal))
+                        self.clauses += implies([tile_a.is_splitter[0]], add_numbers(tile_a.flow_in[side],  tile_b.flow_in[side],  tile_a.flow_splitter[side], self.allocate_variable))
+                        self.clauses += implies([tile_a.is_splitter[0]], add_numbers(tile_a.flow_out[side], tile_b.flow_out[side], tile_a.flow_splitter[side], self.allocate_variable))
 
     def enforce_insertion_side(self):
         for x in range(self.width):

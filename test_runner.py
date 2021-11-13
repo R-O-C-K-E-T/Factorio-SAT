@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from collections import namedtuple
 import re
-from util import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
+from template import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
 from solver import Grid
 from typing import *
 
 from network import open_network, deduplicate_network
-import stringifier, belt_balancer
+import stringifier, belt_balancer, optimisations
 
 TEST_EDGE_START  = '┌'
 TEST_EDGE_MIDDLE = '│'
@@ -14,7 +14,7 @@ TEST_EDGE_STOP   = '└'
 TEST_EDGES = {TEST_EDGE_START, TEST_EDGE_MIDDLE, TEST_EDGE_STOP}
 SUITE_FILENAME = 'test_suite'
 
-def remap_characters(filename, mapping):
+def remap_characters(filename: str, mapping: Dict[str, str]):
     with open(filename, 'r') as f:
         lines = [line.strip() for line in f.readlines()]
     
@@ -50,21 +50,23 @@ class TestCase:
         rule = self.params.get('rule')
         if rule is not None:
             if rule == 'expand-underground':
-                belt_balancer.expand_underground(grid, underground_length)
+                optimisations.expand_underground(grid, underground_length)
             elif rule == 'prevent-mergeable-underground':
-                belt_balancer.prevent_mergeable_underground(grid, underground_length, EDGE_MODE_BLOCK)
+                optimisations.prevent_mergeable_underground(grid, underground_length, EDGE_MODE_BLOCK)
             elif rule == 'glue-splitters':
-                belt_balancer.glue_splitters(grid)
+                optimisations.glue_splitters(grid)
             elif rule == 'prevent-belt-hooks':
-                belt_balancer.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
+                optimisations.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
             elif rule == 'prevent-small-loops':
-                grid.prevent_small_loops()
+                optimisations.prevent_small_loops()
             elif rule == 'prevent-semicircles':
-                belt_balancer.prevent_semicircles(grid, EDGE_MODE_BLOCK)
+                optimisations.prevent_semicircles(grid, EDGE_MODE_BLOCK)
             elif rule == 'prevent-underground-hook':
-                belt_balancer.prevent_underground_hook(grid, EDGE_MODE_BLOCK)
+                optimisations.prevent_underground_hook(grid, EDGE_MODE_BLOCK)
             elif rule == 'prevent-zigzags':
-                belt_balancer.prevent_zigzags(grid, EDGE_MODE_BLOCK)
+                optimisations.prevent_zigzags(grid, EDGE_MODE_BLOCK)
+            elif rule == 'break-symmetry':
+                optimisations.break_vertical_symmetry(grid)
             else:
                 raise RuntimeError(f'Unknown rule "{rule}"')
 
@@ -107,7 +109,7 @@ class TestSuite:
         print('  ' * (indent+1) + f'{passed} passed, {failed} failed' + failed_str)
         return passed, failed
 
-def tokenise(lines):
+def tokenise(lines: List[str]) -> List[Tuple[str, Any]]:
     line_iter = enumerate(lines)
     tokenised = []
 
@@ -146,7 +148,7 @@ def tokenise(lines):
             tokenised.append(('test', stringifier.decode(test_case)))
     return tokenised
 
-def open_suite(filename):
+def open_suite(filename: str):
     with open(filename, 'r') as f:
         lines = [line.strip() for line in f.readlines()]
     

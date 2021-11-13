@@ -2,40 +2,40 @@ from cardinality import quadratic_amo, quadratic_one
 from typing import *
 
 import numpy as np
+from template import BLOCKED_TILE, IGNORED_TILE, ArrayTemplate, BaseGrid, BoolTemplate, CompositeTemplateParams, EdgeModeType, NumberTemplate, OneHotTemplate
 
 from util import *
 
-class Grid(BaseGrid):
-    def __init__(self, width: int, height: int, colours: int, extras: Optional[TileTemplate]=None):
+class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
+    def __init__(self, width: int, height: int, colours: int, extras: CompositeTemplateParams={}):
         assert colours >= 1
         self.colours = colours
 
         self.colour_bits = bin_length(colours + 1)
 
-        template = TileTemplate({
-            'is_empty'           : 'bool',
-            'is_belt'            : 'bool',
-            'is_underground_in'  : 'bool',
-            'is_underground_out' : 'bool',
-            'is_splitter'        : 'bool',
-            'type'               : 'alias is_empty is_belt is_underground_in is_underground_out is_splitter',
+        template = {
+            'is_empty'           : BoolTemplate(),
+            'is_belt'            : BoolTemplate(),
+            'is_underground_in'  : BoolTemplate(),
+            'is_underground_out' : BoolTemplate(),
+            'is_underground'     : lambda is_underground_in, is_underground_out: [is_underground_in, is_underground_out],
+            'is_splitter'        : BoolTemplate(),
+            'type'               : lambda is_empty, is_belt, is_underground, is_splitter: [is_empty, is_belt, *is_underground, is_splitter],
             
-            'input_direction'    : 'one_hot 4', 
-            'output_direction'   : 'one_hot 4',
-            'all_direction'      : 'alias input_direction output_direction',
+            'input_direction'    : OneHotTemplate(4), 
+            'output_direction'   : OneHotTemplate(4),
+            'all_direction'      : lambda input_direction, output_direction: [*input_direction, *output_direction],
 
-            'splitter_side'      : 'bool',
-            'splitter_direction' : 'one_hot 4',
+            'splitter_side'      : BoolTemplate(),
+            'splitter_direction' : OneHotTemplate(4),
             
-            'underground'        : 'arr 4', 
-            'colour'             : 'num ' + str(self.colour_bits), # colour_in
-            'colour_out'         : 'num ' + str(self.colour_bits),
-            'colour_ux'          : 'num ' + str(self.colour_bits),
-            'colour_uy'          : 'num ' + str(self.colour_bits),
-        })
-
-        if extras is not None:
-            template = template.merge(extras)
+            'underground'        : ArrayTemplate(BoolTemplate(), (4,)),
+            'colour'             : NumberTemplate(self.colour_bits), # colour_in
+            'colour_out'         : NumberTemplate(self.colour_bits),
+            'colour_ux'          : NumberTemplate(self.colour_bits),
+            'colour_uy'          : NumberTemplate(self.colour_bits),
+            **extras,
+        }
         super().__init__(template, width, height)
         
         for y in range(height):

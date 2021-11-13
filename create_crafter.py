@@ -3,7 +3,7 @@ from cardinality import quadratic_amo, quadratic_one
 
 from fractions import Fraction
 from collections import Counter
-from util import TileTemplate
+from template import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE, OneHotTemplate
 
 import solver2
 from util import *
@@ -185,9 +185,9 @@ if __name__ == '__main__':
     colour_mapping = dict((item, i) for i, item in enumerate(colour_mapping))
     colour_bits = (len(colour_mapping) - 1).bit_length()
     
-    grid = solver2.Grid(args.width, args.height, colour_bits, flow_bits, TileTemplate({
-        'assembler_type' : f'one_hot {len(assemblers)}',
-    }))
+    grid = solver2.Grid(args.width, args.height, colour_bits, flow_bits, {
+        'assembler_type' : OneHotTemplate(len(assemblers)),
+    })
 
     grid.setup_multitile_entities(EDGE_MODE_BLOCK)
 
@@ -223,8 +223,8 @@ if __name__ == '__main__':
             grid.clauses.append([tile.is_empty])
 
     edge_tiles = [(x, y) for y in range(1, grid.height - 1) for x in (0, grid.width - 1)] + [(x, y) for x in range(1, grid.width - 1) for y in (0, grid.height - 1)]
-    output_literals = [[grid.allocate_literal() for _ in edge_tiles] for _ in products]
-    input_literals = [[grid.allocate_literal() for _ in edge_tiles] for _ in raw_inputs]
+    output_literals = [[grid.allocate_variable() for _ in edge_tiles] for _ in products]
+    input_literals = [[grid.allocate_variable() for _ in edge_tiles] for _ in raw_inputs]
 
     for pos, literals in zip(edge_tiles, zip(*output_literals, *input_literals)):
         tile = grid.get_tile_instance(*pos)

@@ -1,23 +1,26 @@
-import base64, zlib, json, copy, math, struct, argparse
+import base64, zlib, json, copy, math, struct, argparse, enum
 
 import numpy as np
 
 from util import *
 
+class TransportBeltLevel(enum.Enum):
+    NORMAL  = 'transport-belt', 'underground-belt', 'splitter'
+    FAST    = 'fast-transport-belt', 'fast-underground-belt', 'fast-splitter'
+    EXPRESS = 'express-transport-belt', 'express-underground-belt', 'express-splitter'
 
-BELT_TYPES = {
-    'normal'  : ('transport-belt', 'underground-belt', 'splitter'),
-    'fast'    : ('fast-transport-belt', 'fast-underground-belt', 'fast-splitter'),
-    'express' : ('express-transport-belt', 'express-underground-belt', 'express-splitter'),
-}
+    def __init__(self, belt_variant: str, underground_variant: str, splitter_variant: str):
+        self.belt_variant = belt_variant
+        self.underground_variant = underground_variant
+        self.splitter_variant = splitter_variant
 
-def encode_factorio_version(major, minor, patch, developer):
+def encode_factorio_version(major: int, minor: int, patch: int, developer: int) -> int:
     return struct.unpack('<Q', struct.pack('<HHHH', major, minor, patch, developer))[0]
 
-def decode_factorio_version(value):
+def decode_factorio_version(value: int) -> Tuple[int, int, int, int]:
     return struct.unpack('<HHHH', struct.pack('<Q', value))
 
-def decode_blueprint(string):
+def decode_blueprint(string: str):
     version = string[0]
     if version != '0':
         raise RuntimeError('Invalid blueprint version')
@@ -27,7 +30,7 @@ def decode_blueprint(string):
     data = json.loads(raw_bytes)
     return data
 
-def encode_blueprint(data):
+def encode_blueprint(data) -> str:
     raw_bytes = json.dumps(data).encode('utf-8')
     compressed = zlib.compress(raw_bytes, level=9)
     string = base64.b64encode(compressed).decode('utf-8')
@@ -40,26 +43,24 @@ def direction_from_factorio_direction(direction: int):
     return (1 - (direction // 2)) % 4
 
 BLUEPRINT_TEMPLATE = {'blueprint': {'icons': [{'signal': {'type': 'item', 'name': 'splitter'}, 'index': 1}], 'item': 'blueprint', 'version': 281474976710656}}
-def make_blueprint(tiles, label=None, belt_level='normal'):
-    belt, underground_belt, splitter = BELT_TYPES[belt_level]
-
+def make_blueprint(tiles, label: Optional[str]=None, level: TransportBeltLevel=TransportBeltLevel.NORMAL):
     entities = []
     entity_number = 1
-    for x in range(tiles.shape[0]):
-        for y in range(tiles.shape[1]):
-            tile = tiles[x,y]
-            if tile is None or (isinstance(tile, Splitter) and tile.side == 1):
+    for y in range(tiles.shape[0]):
+        for x in range(tiles.shape[1]):
+            tile = tiles[y, x]
+            if tile is None:
                 continue
             
             entity = {'entity_number': entity_number, 'position': {'x': x + 0.5, 'y': y + 0.5}}
             if isinstance(tile, Belt):
-                entity['name'] = belt
+                entity['name'] = level.belt_variant
 
                 direction = direction_to_factorio_direction(tile.output_direction)
                 if direction != 0:
                     entity['direction'] = direction
             elif isinstance(tile, UndergroundBelt):
-                entity['name'] = underground_belt
+                entity['name'] = level.underground_variant
 
                 direction = direction_to_factorio_direction(tile.direction)
                 if direction != 0:
@@ -67,7 +68,9 @@ def make_blueprint(tiles, label=None, belt_level='normal'):
                 
                 entity['type'] = 'input' if tile.is_input else 'output'
             elif isinstance(tile, Splitter):
-                entity['name'] = splitter
+                if tile.side == 1:
+                    continue
+                entity['name'] = level.splitter_variant
                 
                 direction = direction_to_factorio_direction(tile.direction)
                 if direction != 0:
@@ -104,9 +107,9 @@ class TempBelt:
         self.output_direction = direction
 
 def resolve_belt_input_directions(tiles):
-    for x in range(tiles.shape[0]):
-        for y in range(tiles.shape[1]):
-            tile = tiles[x,y]
+    for y in range(tiles.shape[0]):
+        for x in range(tiles.shape[1]):
+            tile = tiles[y, x]
             if tile is None:
                 continue
             if not isinstance(tile, TempBelt):
@@ -118,10 +121,10 @@ def resolve_belt_input_directions(tiles):
 
                 x1 = x - dx
                 y1 = y - dy
-                if x1 < 0 or x1 >= tiles.shape[0] or y1 < 0 or y1 >= tiles.shape[1]:
+                if x1 < 0 or x1 >= tiles.shape[1] or y1 < 0 or y1 >= tiles.shape[0]:
                     continue
 
-                neighbour = tiles[x1, y1]
+                neighbour = tiles[y1, x1]
                 if neighbour is None:
                     continue
 
@@ -137,9 +140,9 @@ def resolve_belt_input_directions(tiles):
             if input_direction is None:
                 input_direction = tile.output_direction
             
-            tiles[x,y] = Belt(input_direction, tile.output_direction)
+            tiles[y, x] = Belt(input_direction, tile.output_direction)
 
-def import_blueprint(data):
+def import_blueprint(data: Any):
     if len(data['blueprint']['entities']) == 0:
         return np.full((0,0), None)
 
@@ -154,14 +157,14 @@ def import_blueprint(data):
 
         floor_pos = math.floor(pos[0]), math.floor(pos[1])
 
-        if any(name == splitter_type for _, _, splitter_type in BELT_TYPES.values()):
+        if any(name == level.splitter_variant for level in TransportBeltLevel):
             dx, dy = direction_to_vec((direction + 1) % 4)
             x, y = pos
             entities[math.floor(x - dx/2), math.floor(y - dy/2)] = Splitter(direction, 0)
             entities[math.floor(x + dx/2), math.floor(y + dy/2)] = Splitter(direction, 1)
-        elif any(name == belt_type for belt_type, _, _ in BELT_TYPES.values()):
+        elif any(name == level.belt_variant for level in TransportBeltLevel):
             entities[floor_pos] = TempBelt(direction)
-        elif any(name == underground_type for _, underground_type, _ in BELT_TYPES.values()):
+        elif any(name == level.underground_variant for level in TransportBeltLevel):
             entities[floor_pos] = UndergroundBelt(direction, entity['type'] == 'input')
         elif name in ('burner-inserter', 'inserter', 'fast-inserter', 'filter-inserter', 'stack-inserter', 'stack-filter-inserter'):
             entities[floor_pos] = Inserter((direction + 2) % 4, 0)
@@ -187,9 +190,9 @@ def import_blueprint(data):
     width = max(x for x, _ in entities) + 1
     height = max(y for _, y in entities) + 1
 
-    tiles = np.full((width, height), None)
+    tiles = np.full((height, width), None)
     for pos, entity in entities.items():
-        tiles[pos] = entity
+        tiles[pos[::-1]] = entity
     del entities
 
 
@@ -316,7 +319,7 @@ if __name__ == '__main__':
 
     encode_parser = subparsers.add_parser('encode', help='Convert solver output into blueprint')
     encode_parser.add_argument('--label', type=str, help='Label for created blueprint')
-    encode_parser.add_argument('--level', choices=list(BELT_TYPES), default='normal', help='Belt technology level to use')
+    encode_parser.add_argument('--level', choices=[level.name.lower() for level in TransportBeltLevel], default='normal', help='Belt technology level to use')
     
     decode_parser = subparsers.add_parser('decode', help='Convert blueprint to solver output format')
     #decode_parser.add_argument('format', choices=['simple', 'flow'], help='Format to encode to')
@@ -326,11 +329,11 @@ if __name__ == '__main__':
     if args.mode == 'encode':
         while True:
             tiles = np.array(json.loads(input()))
-            for i, row in enumerate(tiles):
-                for j, entry in enumerate(row):
-                    tiles[i, j] = read_tile(entry)
+            for y, row in enumerate(tiles):
+                for x, entry in enumerate(row):
+                    tiles[y, x] = read_tile(entry)
             
-            print(encode_blueprint(make_blueprint(tiles, args.label, args.level)))
+            print(encode_blueprint(make_blueprint(tiles, args.label, TransportBeltLevel[args.level.upper()])))
 
     elif args.mode == 'decode':
         while True:
@@ -345,9 +348,9 @@ if __name__ == '__main__':
             #     assert False
             writer = write_tile_simple
             
-            for i, row in enumerate(tiles):
-                for j, tile in enumerate(row):
-                    tiles[i, j] = writer(tile)
+            for y, row in enumerate(tiles):
+                for x, tile in enumerate(row):
+                    tiles[y, x] = writer(tile)
             print(json.dumps(tiles.tolist()))
     else:
         assert False

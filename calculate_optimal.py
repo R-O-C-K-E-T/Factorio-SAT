@@ -1,12 +1,11 @@
 from asyncio.tasks import gather
-import json, math, time, os, asyncio, argparse
+import json, math, os, asyncio, argparse
 import concurrent.futures
-from functools import partial
 import numpy as np
 
-from util import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
 from network import open_network, get_input_output_colours, deduplicate_network
-import belt_balancer, blueprint
+import belt_balancer, blueprint, optimisations
+from template import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
 
 MAXIMUM_UNDERGROUND_LENGTHS = {
     'normal'  : 4,
@@ -42,8 +41,8 @@ def solve_balancer(network, size, solver):
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
     belt_balancer.setup_balancer_ends(grid, network, True)
 
-    belt_balancer.expand_underground(grid, maximum_underground_length, min_x=1, max_x=grid.width-2)
-    belt_balancer.apply_canonicalisation(grid, maximum_underground_length)
+    optimisations.expand_underground(grid, maximum_underground_length, min_x=1, max_x=grid.width-2)
+    optimisations.apply_generic_optimisations(grid, maximum_underground_length)
 
     belt_balancer.enforce_edge_splitters(grid, network)
     grid.set_maximum_underground_length(maximum_underground_length, EDGE_MODE_BLOCK)

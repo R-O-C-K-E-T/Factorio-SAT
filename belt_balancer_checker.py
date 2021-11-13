@@ -1,5 +1,6 @@
 import argparse, json, sys
 import numpy as np
+from template import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
 
 from util import *
 from network import open_network, deduplicate_network
@@ -9,24 +10,24 @@ import belt_balancer, blueprint
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Checks that the provided balancer meshes with the provided network')
     parser.add_argument('network', type=argparse.FileType('r'), help='Splitter network')
-    parser.add_argument('--no-output', action='store_true', help='Run without printing colourised balancer')
+    parser.add_argument('--no-output', action='store_true', help='Run without printing colourised balancer (only exit code)')
     parser.add_argument('--underground-length', type=int, default=4, help='Sets the maximum length of underground section (excludes ends)')
     args = parser.parse_args()
 
     tiles = np.array(json.loads(input()))
-    for i, row in enumerate(tiles):
-        for j, entry in enumerate(row):
-            tiles[i, j] = blueprint.read_tile(entry)
+    for y, row in enumerate(tiles):
+        for x, entry in enumerate(row):
+            tiles[y, x] = blueprint.read_tile(entry)
 
     network = open_network(args.network)
     args.network.close()
 
     network = deduplicate_network(network)
 
-    grid = belt_balancer.create_balancer(network, tiles.shape[0], tiles.shape[1])
+    grid = belt_balancer.create_balancer(network, tiles.shape[1], tiles.shape[0])
     for y in range(grid.height):
         for x in range(grid.width):
-            grid.set_tile(x, y, tiles[x,y])
+            grid.set_tile(x, y, tiles[y, x])
 
     print(len(grid.clauses), file=sys.stderr)
     grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)

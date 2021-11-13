@@ -1,9 +1,65 @@
 import argparse, json, sys
 
-from solver import Grid, Belt
+from solver import Grid
+from template import BLOCKED_TILE, EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
 from util import *
-import belt_balancer
+import optimisations
 
+def prevent_passing(grid: Grid):
+    assert len(grid.get_tile_instance(0, 0).colour) == 1
+
+    for direction in range(4):
+        inv_direction = (direction + 2) % 4
+        for block in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec((direction + 1) % 4), 2, EDGE_MODE_BLOCK):
+            if (block == BLOCKED_TILE).any():
+                continue
+            
+            for colour_sign in (False, True):
+                grid.clauses.append(invert_components([
+                   set_literal(block[0,0].colour[0], colour_sign),
+                   set_literal(block[0,1].colour[0], colour_sign),
+                   set_literal(block[1,0].colour[0], colour_sign),
+                   set_literal(block[1,1].colour[0], colour_sign),
+
+                   block[0,0].input_direction[direction],
+                   block[0,0].output_direction[direction],
+                   block[0,1].input_direction[direction],
+                   block[0,1].output_direction[direction],
+
+                   block[1,0].input_direction[inv_direction],
+                   block[1,0].output_direction[inv_direction],
+                   block[1,1].input_direction[inv_direction],
+                   block[1,1].output_direction[inv_direction],
+                ]))
+
+def prevent_awkward_underground_entry(grid: Grid):
+    for direction in range(4):
+        inv_direction = (direction + 2) % 4
+        across_direction = (direction + 1) % 4
+        for block in grid.iterate_tile_blocks(direction_to_vec(across_direction), 3, direction_to_vec(direction), 3, EDGE_MODE_BLOCK):
+            block[0, 1:3] = None # Unimportant tiles
+
+            if (block == BLOCKED_TILE).any():
+                continue
+            
+            grid.clauses.append(invert_components([
+                *invert_components(block[0,0].all_direction),
+                block[0,0].underground[direction],
+
+                -block[1,0].underground[direction],
+                
+                *invert_components(block[1,1].all_direction),
+
+                # block[2,0].input_direction[direction],
+                block[2,0].output_direction[across_direction],
+
+                # block[2,1].input_direction[across_direction],
+                block[2,1].output_direction[across_direction],
+
+                block[2,2].output_direction[inv_direction],
+
+                block[1,2].output_direction[inv_direction],
+            ]))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Finds an interchange for building composite balancers')
@@ -54,8 +110,15 @@ if __name__ == '__main__':
     grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
     grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
 
-    belt_balancer.expand_underground(grid, args.underground_length)
-    belt_balancer.apply_canonicalisation(grid, args.underground_length)
+    optimisations.expand_underground(grid, args.underground_length)
+    optimisations.apply_generic_optimisations(grid, args.underground_length)
+    optimisations.break_vertical_symmetry(grid)
+    optimisations.break_horisontal_symmetry(grid)
+    optimisations.prevent_spirals(grid)
+
+    prevent_passing(grid)
+
+    prevent_awkward_underground_entry(grid)
     # for tile in grid.iterate_tiles():
     #     grid.clauses += implies(invert_components(tile.all_direction), set_number(0, tile.underground))
     

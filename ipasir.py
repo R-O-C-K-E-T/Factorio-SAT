@@ -1,7 +1,8 @@
+from typing import *
 from ctypes import *
 
 class IPASIRLibrary:
-    def __init__(self, filename):
+    def __init__(self, filename: str):
         self.lib = lib = cdll.LoadLibrary(filename)
 
         lib.ipasir_signature.argtypes = []
@@ -31,10 +32,10 @@ class IPASIRLibrary:
         lib.ipasir_set_terminate.argtypes = [c_void_p, c_void_p, CFUNCTYPE(c_int, c_void_p)]
         lib.ipasir_set_terminate.restype = None
 
-        lib.ipasir_set_learn.argtypes = [c_void_p, c_void_p, c_int, CFUNCTYPE(None, c_void_p, c_int32)]
+        lib.ipasir_set_learn.argtypes = [c_void_p, c_void_p, c_int, CFUNCTYPE(None, c_void_p, POINTER(c_int32))]
         lib.ipasir_set_learn.restype = None
 
-    def get_signature(self):
+    def get_signature(self) -> bytes:
         return self.lib.ipasir_signature()
 
     def create_solver(self):
@@ -44,7 +45,9 @@ class IPASIRSolver:
     def __init__(self, lib):
         self.lib = lib
         self.solver_p = lib.ipasir_init()
-        self.variables = set()
+        self.variables: Set[int] = set()
+        self._learn_callback = None
+        self._terminate_callback = None
 
     def check_closed(self):
         if self.solver_p is None:
@@ -57,6 +60,38 @@ class IPASIRSolver:
             self.variables.add(abs(lit))
             self.lib.ipasir_add(self.solver_p, lit)
         self.lib.ipasir_add(self.solver_p, 0)
+
+    def set_learn(self, callback: Callable[[Any], None], max_clause_size: int=2):
+        callback_type = self.lib.ipasir_set_learn.argtypes[-1]
+        if callback is None: 
+            raw_callback = callback_type(0)
+        else:
+            def raw_callback_impl(_, p):
+                clause = []
+                i = 0
+                while True:
+                    value = p[i]
+                    if value == 0:
+                        break
+                    clause.append(value)
+                    i += 1
+                callback(clause)
+            raw_callback = callback_type(raw_callback_impl)
+            
+        self.lib.ipasir_set_learn(self.solver_p, None, max_clause_size, raw_callback)
+        self._learn_callback = raw_callback
+
+    def set_terminate(self, callback: Callable[[], bool]):
+        callback_type = self.lib.ipasir_set_terminate.argtypes[-1]
+        if callback is None:
+            raw_callback = callback_type(0)
+        else:
+            def raw_callback_impl(_):
+                return bool(callback())
+            raw_callback = callback_type(raw_callback_impl)
+        
+        self.lib.ipasir_set_terminate(self.solver_p, None, raw_callback)
+        self._terminate_callback = raw_callback
 
     def add_clauses(self, clauses):
         self.check_closed()
@@ -78,9 +113,11 @@ class IPASIRSolver:
         self.check_closed()
         
         res = self.lib.ipasir_solve(self.solver_p)
-        if res == 10:
+        if res == 0: # Terminated
+            return None
+        if res == 10: # SAT
             return True
-        if res == 20:
+        if res == 20: # UNSAT
             return False
         raise RuntimeError('Unknown solver state: ' + str(res))
     

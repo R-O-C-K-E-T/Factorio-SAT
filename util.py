@@ -1,18 +1,12 @@
 from typing import *
 
-import traceback, math, collections, subprocess, shlex, io, tempfile, sys, os
+import traceback, math, collections
 from os.path import basename
 
-import numpy as np
-
-from pysat.solvers import Solver
-from pysat.formula import CNF, IDPool
-
-from ipasir import IPASIRLibrary
-
-
-#from pycryptosat import Solver as PyCryptoSolver
-
+LiteralType = int
+ClauseType = List[LiteralType]
+ClauseList = List[ClauseType]
+AllocatorType = Callable[[], int]
 
 class BaseTile:
     def __init__(self, input_direction=None, output_direction=None):
@@ -129,11 +123,6 @@ class AssemblingMachine(BaseTile):
         return 'AssemblingMachine({}, {})'.format(self.x, self.y)
     __repr__ = __str__
 
-LiteralType = int
-ClauseType = List[LiteralType]
-ClauseList = List[ClauseType]
-AllocatorType = Callable[[], int]
-
 def get_stack(): # Doesn't include caller
     result = []
     for entry in traceback.extract_stack()[:-2]:
@@ -165,16 +154,6 @@ class StackTracingList(list):
         for stack, count in sorted(self.traces.items(), key=lambda v: v[1], reverse=True):
             trace = ', '.join(format(basename(file), lineno) for file, lineno in stack)
             print(trace + ' ' * (trace_length - len(trace)) + ' - ' + str(count))
-
-EDGE_MODE_IGNORE = 'EDGE_IGNORE'
-EDGE_MODE_BLOCK  = 'EDGE_BLOCK'
-EDGE_MODE_TILE   = 'EDGE_TILE'
-IGNORED_TILE     = 'TILE_IGNORE'
-BLOCKED_TILE     = 'TILE_BLOCK'
-
-EdgeModeEnumType = Literal['EDGE_IGNORE', 'EDGE_BLOCK', 'EDGE_TILE']
-EdgeModeType = Union[Tuple[EdgeModeEnumType, EdgeModeEnumType], EdgeModeEnumType]
-OffsetTileType = Union[Literal['TILE_IGNORE', 'TILE_BLOCK'], 'TileTemplate']
 
 def add_numbers(input_a: List[LiteralType], input_b: List[LiteralType], output: List[LiteralType], allocator: AllocatorType, carry_in: Optional[LiteralType]=None, allow_overflow=False) -> ClauseList:
     assert len(input_a) == len(input_b)
@@ -463,353 +442,30 @@ def combinations(items: List[T], size: int) -> Generator[List[T], None, None]:
         for sub_combination in combinations(items[i+1:], size-1):
             yield [item] + sub_combination
 
-class TileTemplate:
-    def __init__(self, template: Dict[str, str]):
-        self._template = dict(((key, tuple(val.split(' '))) for key, val in template.items()))
-        acc = 0
+def break_symmetry(left: List[LiteralType], right: List[LiteralType], allocator: AllocatorType) -> ClauseList:
+    assert len(left) == len(right)
+    differences = [allocator() for _ in left]
 
-        reached = set()
-        for name, item_type in self._template.items():
-            if item_type == ('bool',):
-                acc += 1
-            elif item_type[0] in ('arr', 'num', 'signed_num', 'one_hot'):
-                sizes = [int(v) for v in item_type[1:]]
-                assert all(size >= 0 for size in sizes)
-                acc += product(sizes)
-            elif item_type[0] == 'alias':
-                for sub_name in item_type[1:]:
-                    if sub_name[0] == '-':
-                        sub_name = sub_name[1:]
-                    if sub_name not in template:
-                        raise ValueError('Alias argument "{}" not in template'.format(sub_name))
-                    if sub_name not in reached:
-                        raise ValueError('Alias argument "{}" reached in alias before declaration'.format(sub_name))
-            else:
-                raise ValueError('Invalid template type "{}"'.format(' '.join(item_type)))
-            reached.add(name)
-        self.size = acc
-
-        self.tile_type = collections.namedtuple('TileInstance', self._template.keys(), rename=True)
-
-    def instantiate(self, index: int):
-        assert index >= 0
-        acc = index * self.size + 1
-
-        members = {}
-        for name, item_type in self._template.items():
-            if item_type == ('bool',):
-                members[name] = acc
-                acc += 1
-            elif item_type[0] in ('arr', 'num', 'signed_num', 'one_hot'):
-                sizes = [int(v) for v in item_type[1:]]
-                def recurse(sizes):
-                    nonlocal acc
-                    if len(sizes) == 1:
-                        result = list(range(acc, acc+sizes[0]))
-                        acc += sizes[0]
-                    else:
-                        result = []
-                        for _ in range(sizes[0]):
-                            result.append(recurse(sizes[1:]))
-                    return result
-                members[name] = recurse(sizes)
-
-        def invert(val):
-            return (-np.array(val)).tolist()
-
-        for name, item_type in self._template.items():
-            if item_type[0] == 'alias':
-                if len(item_type) == 2:
-                    key = item_type[1]
-                    if key[0] == '-':
-                        inverted = True
-                        key = key[1:]
-                    else:
-                        inverted = False
-                    
-                    value = members[key[1]]
-                    
-                    if inverted:
-                        value = invert(value)
-                    members[name] = value
-                else:
-                    combined = []
-                    for key in item_type[1:]:
-                        if key[0] == '-':
-                            inverted = True
-                            key = key[1:]
-                        else:
-                            inverted = False
-                        value = members[key]
-
-                        if isinstance(value, list) and len(value) > 0 and isinstance(value[0], list):
-                            raise NotImplementedError('Cannot compose multi-dimensional element into alias')
-
-                        if inverted:
-                            value = invert(value)
-
-                        if isinstance(value, int):
-                            combined.append(value)
-                        else:
-                            combined += value
-                    members[name] = combined
-        return self.tile_type(**members)
-
-    def merge(self, other):
-        result_template = dict((key, ' '.join(val)) for key, val in self._template.items())
-        for name, item_type in other._template.items():
-            item_type = ' '.join(item_type)
-            if name in result_template and result_template[name] != item_type:
-                raise ValueError('Incompatible tile templates for merge')
-            result_template[name] = item_type
-
-        return TileTemplate(result_template)
-
-    def parse(self, variables: List[bool]):
-        assert len(variables) % self.size == 0
-
-        result = []
-        for i in range(0, len(variables), self.size):
-            entry = {}
-            for name, item_type in self._template.items():
-                if item_type == ('bool',):
-                    entry[name] = variables[i]
-                    i += 1
-                elif item_type[0] in ('arr', 'num', 'signed_num', 'one_hot'):
-                    sizes = [int(v) for v in item_type[1:]]
-                    arr = np.array(variables[i:(i + product(sizes))])
-
-                    if item_type[0] == 'arr':
-                        arr = arr.reshape(sizes)
-                    elif item_type[0] in ('num', 'signed_num'):
-                        if sizes[-1] == 0:
-                            arr = np.zeros(sizes[:-1], dtype=int)
-                        else:
-                            is_signed = item_type[0] == 'signed_num'
-                            arr = np.array([read_number(value, is_signed) for value in arr.reshape((-1, sizes[-1]))])
-                            arr = arr.reshape(sizes[:-1])
-                    elif item_type[0] == 'one_hot':
-                        if sizes[-1] == 0:
-                            arr = np.full(sizes[:-1], None)
-                        else:
-                            temp = []
-                            for value in arr.reshape((-1, sizes[-1])):
-                                try:
-                                    temp.append(value.tolist().index(True))
-                                except ValueError:
-                                    temp.append(None)
-                            arr = np.array(temp, dtype=object).reshape(sizes[:-1])
-                    else:
-                        assert False
-                    entry[name] = arr.tolist()
-                    i += product(sizes)
-            result.append(entry)
-        return np.array(result)
-
-    def initial_clauses(self, indices):
-        clauses = []
-        for i in indices:
-            tile = self.instantiate(i)._asdict()
-
-            for name, item_type in self._template.items():
-                if item_type[0] == 'one_hot':
-                    entry = np.array(tile[name])
-
-                    #clauses += quadratic_amo()
-        return clauses
-
-def expand_edge_mode(edge_mode: EdgeModeType) -> Tuple[EdgeModeEnumType, EdgeModeEnumType]:
-    if isinstance(edge_mode, str):
-        return edge_mode, edge_mode
-    else:
-        return edge_mode
-
-def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[LiteralType]]:
-    def interpret_solver_answer(stdout):
-        result = io.TextIOWrapper(stdout)
-        while True:
-            line = result.readline()
-            if line.startswith('s'):
-                break
-            print(line, file=sys.stderr, end='')
-        
-        if line.startswith('s UNSATISFIABLE'):
-            return None
-        
-        if not line.startswith('s SATISFIABLE'):
-            raise RuntimeError('Unknown solution status: ' + line)
-        
-        model = []
-        while True:
-            line = result.readline()
-            variables = line.split(' ')
-            if variables[0] != 'v':
-                raise RuntimeError('Solution not returned correctly: ' + line)
-            model += [int(v) for v in variables[1:]]
-            if model[-1] == 0:
-                model.pop()
-                break
-        return model
-
-    formula = CNF(from_clauses=clauses)
-    del clauses
-    pieces = shlex.split(cmd)
-    if '$FILE' in pieces:
-        with tempfile.NamedTemporaryFile('w', suffix='.cnf') as file:
-            formula.to_file(file.name)
-            del formula
-            file.flush()
-
-            pieces = [file.name if piece == '$FILE' else piece for piece in pieces]
-
-            with subprocess.Popen(pieces, stdout=subprocess.PIPE) as process:
-                return interpret_solver_answer(process.stdout)
-    else:
-        with subprocess.Popen(pieces, stdin=subprocess.PIPE, stdout=subprocess.PIPE) as process:
-            formula.to_fp(io.TextIOWrapper(process.stdin))
-            del formula
-            process.stdin.close()
-            return interpret_solver_answer(process.stdout)
-
-class BaseGrid:
-    def __init__(self, template: TileTemplate, width: int, height: int):
-        assert width > 0 and height > 0
-        self.template = template
-        self.width = width
-        self.height = height
-
-        self.pool = IDPool(start_from=self.total_variables + 1)
-        self.clauses: List[ClauseType] = []
-
-        #self.clauses += template.initial_clauses(range(self.width * self.height))
-
-    @property
-    def total_variables(self):
-        return self.width * self.height * self.template.size
-
-    @property
-    def tile_size(self):
-        return self.template.size
-
-    def iterate_tiles(self):
-        for x in range(self.width):
-            for y in range(self.height):
-                yield self.get_tile_instance(x, y)
-
-    def iterate_tile_blocks(self, columnwise_dir: Tuple[int, int], column_count: int, rowwise_dir: Tuple[int, int], row_count: int, edge_mode: EdgeModeType):
-        cx, cy = columnwise_dir
-        rx, ry = rowwise_dir
-        assert abs(cx) + abs(cy) == 1
-        assert abs(rx) + abs(ry) == 1
-        assert column_count > 0
-        assert row_count > 0
-
-        for x in range(self.width):
-            for y in range(self.height):
-                yield np.frompyfunc(lambda i, j: self.get_tile_instance_offset(x, y, rx*i + cx*j, ry*i + cy*j, edge_mode), 2, 1)(*np.ogrid[0:row_count, 0:column_count])
-
-    def allocate_variable(self):
-        return self.pool._next()
-
-    def get_tile_instance(self, x: int, y: int):
-        assert x >= 0 and y >= 0 and x < self.width and y < self.height
-        return self.template.instantiate(y * self.width + x)
-
-    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int, edge_mode: EdgeModeType) -> OffsetTileType:
-        edge_mode = expand_edge_mode(edge_mode)
-        assert all(mode in (EDGE_MODE_IGNORE, EDGE_MODE_BLOCK, EDGE_MODE_TILE) for mode in edge_mode)
-        
-        pos = [x + dx, y + dy]
-        size = self.width, self.height
-
-        is_ignored = False
-        for i in range(2):
-            if pos[i] < 0 or pos[i] >= size[i]:
-                if edge_mode[i] == EDGE_MODE_TILE:
-                    pos[i] = pos[i] % size[i]
-                elif edge_mode[i] == EDGE_MODE_BLOCK:
-                    return BLOCKED_TILE
-                elif edge_mode[i] == EDGE_MODE_IGNORE:
-                    is_ignored = True
-                else:
-                    assert False
-        
-        if is_ignored:
-            return IGNORED_TILE
-
-        return self.get_tile_instance(*pos)
-
-    def parse_solution(self, solution):
-        variables = [False] * self.total_variables
-
-        for item in solution:
-            if item > 0 and item <= len(variables):
-                variables[item-1] = True
-        return np.array(self.template.parse(variables)).reshape((self.height, self.width)).T    
-
-    def check(self, solver: str='g3'):
-        return self.solve(solver) is not None
-    
-    def solve(self, solver: str='g3'):
-        if solver == 'cryptosat':
-            s = PyCryptoSolver()
-            s.add_clauses(self.clauses)
-            satisfiable, solution = s.solve()
-            if not satisfiable:
-                return None
-            
-            variables = solution[1:(self.total_variables + 1)]
-            return np.array(self.template.parse(variables)).reshape((self.height, self.width)).T    
-        elif solver.startswith('cmd:'):
-            solution = run_command_solver(solver[4:], self.clauses)
-            if solution is None:
-                return None
-            return self.parse_solution(solution)
+    clauses = []
+    for left_lit, right_lit, diff, prev_diff in zip(left, right, differences, [None] + differences):
+        if prev_diff is None:
+            clauses += [
+                [ left_lit, -right_lit,  diff],
+                [-left_lit, -right_lit, -diff],
+                [ left_lit,  right_lit, -diff],
+                [-left_lit,  right_lit],
+            ]
         else:
-            if solver.startswith('lib:'):
-                s = IPASIRLibrary(solver[4:]).create_solver()
-                s.add_clauses(self.clauses)
-            else:
-                s = Solver(name=solver, bootstrap_with=self.clauses)
-            
-            with s:
-                if s.solve():
-                    return self.parse_solution(s.get_model())
-                else:
-                    return None
+            clauses += [
+                [-prev_diff, diff],
+                [ left_lit, -right_lit,  diff],
+                [ prev_diff, -left_lit, -right_lit, -diff],
+                [ prev_diff,  left_lit,  right_lit, -diff],
+                [ prev_diff, -left_lit,  right_lit],
+            ]
+    return clauses
 
-    def itersolve(self, important_variables=set(), solver: str='g3'):
-        if solver == 'cryptosat':
-            s = PyCryptoSolver()
-            s.add_clauses(self.clauses)
-            while True:
-                satisfiable, solution = s.solve()
-                if not satisfiable:
-                    break
-                
-                variables = solution[1:(self.total_variables + 1)]
-                yield np.array(self.template.parse(variables)).reshape((self.height, self.width)).T    
-
-                s.add_clause([set_literal(var, not solution[var]) for var in important_variables])
-        elif solver.startswith('cmd:'):
-            solution = run_command_solver(solver[4:], self.clauses)
-            if solution is None:
-                return
-            yield self.parse_solution(solution)
-        else:
-            if solver.startswith('lib:'):
-                s = IPASIRLibrary(solver[4:]).create_solver()
-                s.add_clauses(self.clauses)
-            else:
-                s = Solver(name=solver, bootstrap_with=self.clauses)
-            
-            with s:
-                while s.solve():
-                    solution = s.get_model()
-                    yield self.parse_solution(solution)
-                    
-                    s.add_clause([-lit for lit in solution if abs(lit) in important_variables])
-
-    def write(self, filename, comments=None):
-        cnf = CNF(from_clauses=self.clauses)
-        cnf.to_file(filename, comments)
+BELT_TILES = [Belt(direction, (direction + curve) % 4) for direction in range(4) for curve in range(-1, 2)]
+UNDERGROUND_TILES = [UndergroundBelt(direction, type) for direction in range(4) for type in range(2)]
+SPLITTER_TILES = [Splitter(direction, i) for direction in range(4) for i in range(2)]
+ALL_TILES = [None] + BELT_TILES + UNDERGROUND_TILES + SPLITTER_TILES

@@ -2,6 +2,8 @@ from collections import defaultdict
 import math, copy, argparse, json
 from os import path
 
+import numpy as np
+
 from pysat.solvers import Solver
 
 try:
@@ -476,6 +478,8 @@ def optimise_colours(network, solver='g3'):
         return result_network
 
 def parse_network(tiles, assume_edge_splitter_are_connected=False):
+    tiles = tiles.T
+
     colour_mapping = np.full_like(tiles, None)
     splitters = set()
     current_colour = 0

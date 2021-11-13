@@ -1,8 +1,8 @@
 import argparse, sys, json
 from util import *
-import numpy as np
 
-import solver
+from template import EdgeModeType, BLOCKED_TILE, IGNORED_TILE, EDGE_MODE_BLOCK, EDGE_MODE_TILE
+import solver, optimisations
 
 def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
     for y in range(grid.height):
@@ -85,10 +85,10 @@ if __name__ == '__main__':
     grid.prevent_intersection(edge_mode)
     grid.prevent_bad_undergrounding(edge_mode)
 
-    grid.prevent_small_loops()
+    optimisations.prevent_small_loops(grid)
     
     if args.underground_length > 0:
-        grid.prevent_empty_along_underground(args.underground_length, edge_mode)
+        optimisations.prevent_empty_along_underground(grid, args.underground_length, edge_mode)
         grid.set_maximum_underground_length(args.underground_length, edge_mode)
 
     if args.no_parallel:
@@ -98,17 +98,14 @@ if __name__ == '__main__':
     if args.single_loop:
         ensure_loop_length(grid, edge_mode)
 
-    for x in range(grid.width):
-        for y in range(grid.height):
-            tile = grid.get_tile_instance(x, y)
+    for tile in grid.iterate_tiles():
+        if not args.allow_empty:
+            grid.clauses.append(tile.all_direction) # Ban Empty
 
-            if not args.allow_empty:
-                grid.clauses.append(tile.all_direction) # Ban Empty
+        if args.underground_length == 0: # Ban underground
+            grid.clauses += set_number(0, tile.underground)
 
-            if args.underground_length == 0: # Ban underground
-                grid.clauses += set_number(0, tile.underground)
-
-            grid.clauses += set_number(0, tile.is_splitter) # Ban splitters
+        grid.clauses += set_number(0, tile.is_splitter) # Ban splitters
     
     if args.output is not None:
         with args.output:
