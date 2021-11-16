@@ -334,49 +334,57 @@ def render_attributes(solution, font, names: List[str]):
     glEnable(GL_TEXTURE_2D)
     glColor3f(1,1,1)
 
-    for x in range(solution.shape[1]):
-        for y in range(solution.shape[0]):
+    text_grid = np.empty_like(solution, dtype=object)
+    for y in range(solution.shape[0]):
+        for x in range(solution.shape[1]):
             item = solution[y, x]
 
             lines = []
             for name in names:
-                if name not in item:
-                    raise RuntimeError('{} not found in tile {}'.format(name, item))
-                '''def stringify(value):
-                    if value is None:
-                        return '-'
-                    elif isinstance(value, bool):
-                        if value:
-                            return 'P'
-                        else:
-                            return 'N'
-                    elif isinstance(value, int):
-                        return str(value)
-                    else:
-                        if len(value) == 0:
-                            return '[]'
-                        elif isinstance(value[0], int):
-                            return '[' + ','.join(stringify(item) for item in value) + ']'
-                        else:
-                            return '[' + ''.join(stringify(item) for item in value) + ']'
-                text = stringify(item[name])'''
-                text = str(np.array(item[name]))
+                sub_item = item
+                for piece in name.split('.'):
+                    try:
+                        sub_item = item[int(piece)]
+                        continue
+                    except ValueError:
+                        pass
+
+                    if piece not in sub_item:
+                        raise RuntimeError('{} not found in tile {}'.format(name, item))
+                    sub_item = sub_item[piece]
+                        
+                    
+                text = str(np.array(sub_item))
                 for line in text.split('\n'):
-                    surface = font.render(line, True, (255, 0, 0), (0,0,0))
-                    lines.append(surface)
+                    lines.append(line)
 
-            width = max(surface.get_width() for surface in lines)
-            height = sum(surface.get_height() for surface in lines)
+            text_grid[y, x] = lines
+    
+    max_width = 0
+    max_height = 0
+    for lines in text_grid.reshape(-1):
+        sizes = [font.size(line) for line in lines]
+        
+        width = max(width for width, _ in sizes)
+        height = sum(height for _, height in sizes)
 
-            if width == 0:
-                continue
+        max_width = max(width, max_width)
+        max_height = max(height, max_height)
 
-            scale = min(1 / width, 1 / height)
+    if max_width == 0 or max_height == 0:
+        return
 
+    scale = min(1 / max_width, 1 / max_height)
+
+    for y in range(solution.shape[0]):
+        for x in range(solution.shape[1]):
+            lines = text_grid[y, x]
             glPushMatrix()
             glTranslatef(x, y, 0)
             
-            for surface in lines:
+            for line in lines:
+                surface = font.render(line, True, (255, 0, 0), (0,0,0)) 
+
                 data = np.empty((*surface.get_size()[::-1], 4), dtype=np.uint8)
                 data[:,:,-1] = pygame.surfarray.array3d(surface)[:,:,0].T
                 data[:,:,:-1] = 0, 0, 255
@@ -387,17 +395,17 @@ def render_attributes(solution, font, names: List[str]):
                 tile_height = scale * surface.get_height()
 
                 glBegin(GL_QUADS)
-                glTexCoord(0,0)
-                glVertex2f(0,0)
+                glTexCoord(0, 0)
+                glVertex2f(0, 0)
                 
-                glTexCoord(0,1)
-                glVertex2f(0,tile_height)
+                glTexCoord(0, 1)
+                glVertex2f(0, tile_height)
                 
-                glTexCoord(1,1)
-                glVertex2f(tile_width,tile_height)
+                glTexCoord(1, 1)
+                glVertex2f(tile_width, tile_height)
                 
-                glTexCoord(1,0)
-                glVertex2f(tile_width,0)
+                glTexCoord(1, 0)
+                glVertex2f(tile_width, 0)
                 glEnd()
 
                 glTranslatef(0, tile_height, 0)
