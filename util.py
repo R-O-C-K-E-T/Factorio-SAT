@@ -280,6 +280,12 @@ def set_literal(lit: LiteralType, value: bool) -> LiteralType:
     else:
         return -lit
 
+def set_all_false(literals: List[LiteralType]) -> ClauseList:
+    return [[-lit] for lit in literals]
+
+def set_all_true(literals: List[LiteralType]) -> ClauseList:
+    return [[lit] for lit in literals]
+
 def set_number(value: int, literals: List[LiteralType]) -> ClauseList:
     assert value < (1 << len(literals))
 
@@ -322,8 +328,8 @@ def set_numbers_equal(number_a: List[LiteralType], number_b: List[LiteralType], 
     clauses = []
 
     if allow_different_lengths:
-        clauses += set_number(0, number_a[len(number_b):])
-        clauses += set_number(0, number_b[len(number_a):])
+        clauses += set_all_false(number_a[len(number_b):])
+        clauses += set_all_false(number_b[len(number_a):])
     else:
         assert len(number_a) == len(number_b)
     
@@ -334,7 +340,7 @@ def set_numbers_equal(number_a: List[LiteralType], number_b: List[LiteralType], 
 def set_not_number(value: int, literals: List[LiteralType]) -> ClauseType:
     return [-lit[0] for lit in set_number(value, literals)]
 
-def set_maximum(value: int, literals: List[LiteralType]):
+def set_maximum(value: int, literals: List[LiteralType]) -> ClauseList:
     if len(literals) == 0:
         assert value == 0
         return []

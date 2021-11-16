@@ -1,6 +1,7 @@
+import enum
 from typing import *
 
-import inspect, shlex, subprocess, tempfile, sys, json, io
+import inspect, shlex, subprocess, tempfile, sys, io, collections
 from dataclasses import dataclass
 
 import numpy as np
@@ -12,17 +13,19 @@ from ipasir import IPASIRLibrary
 
 from util import *
 
-EDGE_MODE_IGNORE = 'EDGE_IGNORE'
-EDGE_MODE_BLOCK  = 'EDGE_BLOCK'
-EDGE_MODE_TILE   = 'EDGE_TILE'
-IGNORED_TILE     = 'TILE_IGNORE'
-BLOCKED_TILE     = 'TILE_BLOCK'
+class EdgeMode(enum.Enum):
+    IGNORE = enum.auto()
+    BLOCK  = enum.auto()
+    TILE   = enum.auto()
 
-EdgeModeEnumType = Literal['EDGE_IGNORE', 'EDGE_BLOCK', 'EDGE_TILE']
-EdgeModeType = Union[Tuple[EdgeModeEnumType, EdgeModeEnumType], EdgeModeEnumType]
+class TileResult(enum.Enum):
+    IGNORED = enum.auto()
+    BLOCKED = enum.auto()
 
-def expand_edge_mode(edge_mode: EdgeModeType) -> Tuple[EdgeModeEnumType, EdgeModeEnumType]:
-    if isinstance(edge_mode, str):
+EdgeModeType = Union[Tuple[EdgeMode, EdgeMode], EdgeMode]
+
+def expand_edge_mode(edge_mode: EdgeMode) -> Tuple[EdgeMode, EdgeMode]:
+    if isinstance(edge_mode, EdgeMode):
         return edge_mode, edge_mode
     else:
         return edge_mode
@@ -272,7 +275,7 @@ class BaseGrid(Generic[I, P]):
             for y in range(self.height):
                 yield self.get_tile_instance(x, y)
 
-    def iterate_tile_blocks(self, columnwise_dir: Tuple[int, int], column_count: int, rowwise_dir: Tuple[int, int], row_count: int, edge_mode: EdgeModeType) -> Iterator[np.ndarray]:
+    def iterate_tile_blocks(self, columnwise_dir: Tuple[int, int], column_count: int, rowwise_dir: Tuple[int, int], row_count: int, edge_mode: EdgeModeType, min_x: Optional[int]=None, min_y: Optional[int]=None, max_x: Optional[int]=None, max_y: Optional[int]=None) -> Iterator[np.ndarray]:
         cx, cy = columnwise_dir
         rx, ry = rowwise_dir
         assert abs(cx) + abs(cy) == 1
@@ -280,8 +283,32 @@ class BaseGrid(Generic[I, P]):
         assert column_count > 0
         assert row_count > 0
 
+        max_x_offset = rx * (row_count - 1) + cx * (column_count - 1)
+        max_y_offset = ry * (row_count - 1) + cy * (column_count - 1)
+
         for x in range(self.width):
             for y in range(self.height):
+                if min_x is not None:
+                    if x < min_x:
+                        continue
+                    if x + max_x_offset < min_x:
+                        continue
+                if min_y is not None:
+                    if y < min_y:
+                        continue
+                    if x + max_y_offset < min_y:
+                        continue
+                if max_x is not None:
+                    if x > max_x:
+                        continue
+                    if x + max_x_offset > max_x:
+                        continue
+                if max_y is not None:
+                    if y > max_y:
+                        continue
+                    if x + max_y_offset > max_y:
+                        continue
+
                 yield np.frompyfunc(lambda i, j: self.get_tile_instance_offset(x, y, rx*i + cx*j, ry*i + cy*j, edge_mode), 2, 1)(*np.ogrid[0:row_count, 0:column_count])
 
     def iterate_tile_lines(self, direction: Tuple[int, int], length: int, edge_mode: EdgeModeType) -> Iterator[Sequence[I]]:
@@ -300,9 +327,8 @@ class BaseGrid(Generic[I, P]):
         assert x >= 0 and y >= 0 and x < self.width and y < self.height
         return self.tiles[y, x]
 
-    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int, edge_mode: EdgeModeType) -> Union[Literal['TILE_IGNORE', 'TILE_BLOCK'], I]:
+    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int, edge_mode: EdgeModeType) -> Union[TileResult, I]:
         edge_mode = expand_edge_mode(edge_mode)
-        assert all(mode in (EDGE_MODE_IGNORE, EDGE_MODE_BLOCK, EDGE_MODE_TILE) for mode in edge_mode)
         
         pos = [x + dx, y + dy]
         size = self.width, self.height
@@ -310,22 +336,23 @@ class BaseGrid(Generic[I, P]):
         is_ignored = False
         for i in range(2):
             if pos[i] < 0 or pos[i] >= size[i]:
-                if edge_mode[i] == EDGE_MODE_TILE:
+                if edge_mode[i] == EdgeMode.TILE:
                     pos[i] = pos[i] % size[i]
-                elif edge_mode[i] == EDGE_MODE_BLOCK:
-                    return BLOCKED_TILE
-                elif edge_mode[i] == EDGE_MODE_IGNORE:
+                elif edge_mode[i] == EdgeMode.BLOCK:
+                    return TileResult.BLOCKED
+                elif edge_mode[i] == EdgeMode.IGNORE:
                     is_ignored = True
                 else:
                     assert False
         
         if is_ignored:
-            return IGNORED_TILE
+            return TileResult.IGNORED
 
         return self.get_tile_instance(*pos)
 
     def parse_solution(self, solution: List[LiteralType]) -> np.ndarray:
-        mapping = {abs(lit): lit > 0 for lit in solution}
+        mapping = collections.defaultdict(lambda: 0)
+        mapping.update({abs(lit): lit > 0 for lit in solution})
         return np.frompyfunc(lambda tile: self.template.parse(tile, mapping), 1, 1)(self.tiles)
 
     def check(self, solver: str='g3'):

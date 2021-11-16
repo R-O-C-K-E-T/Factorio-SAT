@@ -4,7 +4,7 @@ import argparse, json
 
 import optimisations
 from solver import Grid, Belt
-from template import OneHotTemplate, EDGE_MODE_BLOCK, EDGE_MODE_IGNORE, BLOCKED_TILE
+from template import OneHotTemplate, EdgeMode, TileResult
 from util import *
 from network import get_input_output_colours, open_network, deduplicate_network
 
@@ -57,7 +57,7 @@ def setup_balancer_ends(grid: Grid, network, aligned: bool):
                         consequences += [[tile.input_direction[0]], [tile.output_direction[0]], [-tile.is_splitter[0]], [-tile.is_splitter[1]]]
                         consequences += set_number(colour, tile.colour)
                     else:
-                        consequences += set_number(0, tile.all_direction)
+                        consequences += set_all_false(tile.all_direction)
                 grid.clauses += implies([literal], consequences)
 
     if aligned:
@@ -83,8 +83,8 @@ def create_balancer(network, width: int, height: int) -> Grid:
             continue
         grid.prevent_colour(colour)
     
-    grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
-    grid.prevent_bad_colouring(EDGE_MODE_BLOCK)
+    grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
+    grid.prevent_bad_colouring(EdgeMode.BLOCK)
 
     # There is exactly one splitter of each type
     for i, count in enumerate(network.values()):
@@ -128,11 +128,11 @@ def create_balancer(network, width: int, height: int) -> Grid:
                     else:
                         precondition.append(tile00.input_direction[direction])
                     
-                    tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EDGE_MODE_BLOCK)
-                    tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EDGE_MODE_BLOCK)
-                    tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EDGE_MODE_BLOCK)
+                    tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.BLOCK)
+                    tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.BLOCK)
+                    tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.BLOCK)
 
-                    if any(tile == BLOCKED_TILE for tile in (tile00, tile10, tile01, tile11)):
+                    if any(tile == TileResult.BLOCKED for tile in (tile00, tile10, tile01, tile11)):
                         grid.clauses.append(invert_components(precondition))
                         continue
 
@@ -237,6 +237,9 @@ if __name__ == '__main__':
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
     args = parser.parse_args()
 
+    if args.underground_length == -1:
+        args.underground_length = float('inf')
+
     if args.edge_splitters and args.edge_belts:
         raise RuntimeError('--edge-splitters and --edge-belts are mutually exclusive')
 
@@ -246,7 +249,7 @@ if __name__ == '__main__':
     network = deduplicate_network(network)
 
     grid = create_balancer(network, args.width, args.height)
-    grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
+    grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
 
     if args.edge_splitters or args.fast:
         enforce_edge_splitters(grid, network)
@@ -257,17 +260,17 @@ if __name__ == '__main__':
     if args.expand_underground or args.fast:
         optimisations.expand_underground(grid, args.underground_length, min_x=1, max_x=grid.width-2)
     if args.prevent_mergeable_underground or args.fast:
-        optimisations.prevent_mergeable_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
+        optimisations.prevent_mergeable_underground(grid, args.underground_length, EdgeMode.BLOCK)
     if args.break_symmetry:
         optimisations.break_vertical_symmetry(grid)
     if args.prevent_bad_patterns or args.fast:
-        optimisations.prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
-        optimisations.prevent_semicircles(grid, EDGE_MODE_BLOCK)
+        optimisations.prevent_belt_hooks(grid, EdgeMode.BLOCK)
+        optimisations.prevent_semicircles(grid, EdgeMode.BLOCK)
         optimisations.prevent_small_loops(grid)
 
     #setup_balancer_ends_with_offsets(grid, network, 1, 0)#args.start_offset, args.end_offset)
-    grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
-    optimisations.prevent_empty_along_underground(grid, args.underground_length, EDGE_MODE_BLOCK)
+    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
+    optimisations.prevent_empty_along_underground(grid, args.underground_length, EdgeMode.BLOCK)
 
     setup_balancer_ends(grid, network, args.aligned)
 

@@ -5,7 +5,7 @@ import numpy as np
 
 from network import open_network, get_input_output_colours, deduplicate_network
 import belt_balancer, blueprint, optimisations
-from template import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
+from template import EdgeMode
 
 MAXIMUM_UNDERGROUND_LENGTHS = {
     'normal'  : 4,
@@ -38,14 +38,14 @@ def solve_balancer(network, size, solver):
 
     network = deduplicate_network(network)
     grid = belt_balancer.create_balancer(network, width, height)
-    grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
+    grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
     belt_balancer.setup_balancer_ends(grid, network, True)
 
     optimisations.expand_underground(grid, maximum_underground_length, min_x=1, max_x=grid.width-2)
     optimisations.apply_generic_optimisations(grid, maximum_underground_length)
 
     belt_balancer.enforce_edge_splitters(grid, network)
-    grid.set_maximum_underground_length(maximum_underground_length, EDGE_MODE_BLOCK)
+    grid.set_maximum_underground_length(maximum_underground_length, EdgeMode.BLOCK)
     
     solution = grid.solve(solver)
     if solution is None:

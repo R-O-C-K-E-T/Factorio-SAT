@@ -1,7 +1,7 @@
 import argparse, json, sys
 
 from solver import Grid
-from template import BLOCKED_TILE, EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
+from template import TileResult, EdgeMode
 from util import *
 import optimisations
 
@@ -10,8 +10,8 @@ def prevent_passing(grid: Grid):
 
     for direction in range(4):
         inv_direction = (direction + 2) % 4
-        for block in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec((direction + 1) % 4), 2, EDGE_MODE_BLOCK):
-            if (block == BLOCKED_TILE).any():
+        for block in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec((direction + 1) % 4), 2, EdgeMode.BLOCK):
+            if (block == TileResult.BLOCKED).any():
                 continue
             
             for colour_sign in (False, True):
@@ -36,10 +36,10 @@ def prevent_awkward_underground_entry(grid: Grid):
     for direction in range(4):
         inv_direction = (direction + 2) % 4
         across_direction = (direction + 1) % 4
-        for block in grid.iterate_tile_blocks(direction_to_vec(across_direction), 3, direction_to_vec(direction), 3, EDGE_MODE_BLOCK):
+        for block in grid.iterate_tile_blocks(direction_to_vec(across_direction), 3, direction_to_vec(direction), 3, EdgeMode.BLOCK):
             block[0, 1:3] = None # Unimportant tiles
 
-            if (block == BLOCKED_TILE).any():
+            if (block == TileResult.BLOCKED).any():
                 continue
             
             grid.clauses.append(invert_components([
@@ -82,7 +82,7 @@ if __name__ == '__main__':
 
     # No splitters
     for tile in grid.iterate_tiles():
-        grid.clauses += set_number(0, tile.is_splitter)
+        grid.clauses += set_all_false(tile.is_splitter)
 
 
     for y in range(0, grid.height):
@@ -104,11 +104,11 @@ if __name__ == '__main__':
             tile1 = grid.get_tile_instance(grid.width-1, y+1)
             grid.clauses += set_numbers(0, 1, tile0.colour, tile1.colour)
 
-    grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
-    grid.prevent_bad_colouring(EDGE_MODE_BLOCK)
+    grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
+    grid.prevent_bad_colouring(EdgeMode.BLOCK)
 
-    grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
-    grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
+    grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
+    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
 
     optimisations.expand_underground(grid, args.underground_length)
     optimisations.apply_generic_optimisations(grid, args.underground_length)
@@ -120,7 +120,7 @@ if __name__ == '__main__':
 
     prevent_awkward_underground_entry(grid)
     # for tile in grid.iterate_tiles():
-    #     grid.clauses += implies(invert_components(tile.all_direction), set_number(0, tile.underground))
+    #     grid.clauses += implies(invert_components(tile.all_direction), set_all_false(tile.underground))
     
 
     print(len(grid.clauses), file=sys.stderr)

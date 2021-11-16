@@ -1,6 +1,8 @@
 from typing import *
 from ctypes import *
 
+from util import LiteralType, ClauseType, ClauseList
+
 class IPASIRLibrary:
     def __init__(self, filename: str):
         self.lib = lib = cdll.LoadLibrary(filename)
@@ -53,7 +55,7 @@ class IPASIRSolver:
         if self.solver_p is None:
             raise RuntimeError('Solver already closed')
 
-    def add_clause(self, clause):
+    def add_clause(self, clause: ClauseType):
         self.check_closed()
         
         for lit in clause:
@@ -61,7 +63,7 @@ class IPASIRSolver:
             self.lib.ipasir_add(self.solver_p, lit)
         self.lib.ipasir_add(self.solver_p, 0)
 
-    def set_learn(self, callback: Callable[[Any], None], max_clause_size: int=2):
+    def set_learn(self, callback: Callable[[ClauseType], None], max_clause_size: int=2):
         callback_type = self.lib.ipasir_set_learn.argtypes[-1]
         if callback is None: 
             raw_callback = callback_type(0)
@@ -93,7 +95,7 @@ class IPASIRSolver:
         self.lib.ipasir_set_terminate(self.solver_p, None, raw_callback)
         self._terminate_callback = raw_callback
 
-    def add_clauses(self, clauses):
+    def add_clauses(self, clauses: ClauseList):
         self.check_closed()
         ipasir_add = self.lib.ipasir_add
         solver_p = self.solver_p
@@ -104,7 +106,7 @@ class IPASIRSolver:
                 ipasir_add(solver_p, lit)
             ipasir_add(solver_p, 0)
     
-    def assume(self, lit):
+    def assume(self, lit: LiteralType):
         self.check_closed()
         
         self.lib.ipasir_assume(self.solver_p, lit)
@@ -121,7 +123,7 @@ class IPASIRSolver:
             return False
         raise RuntimeError('Unknown solver state: ' + str(res))
     
-    def get_model(self):
+    def get_model(self) -> List[LiteralType]:
         self.check_closed()
         
         model = []
@@ -132,7 +134,7 @@ class IPASIRSolver:
             model.append(value)
         return model
 
-    def unsat_used_assumption(self, lit):
+    def unsat_used_assumption(self, lit: LiteralType):
         self.check_closed()
         
         return bool(self.lib.ipasir_failed(self.solver_p, lit))

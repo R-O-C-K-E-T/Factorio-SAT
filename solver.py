@@ -57,11 +57,11 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                         output = tile.output_direction.copy()
                         del output[direction]
 
-                        self.clauses += implies([splitter_type, tile.input_direction[direction]], set_number(0, output))
+                        self.clauses += implies([splitter_type, tile.input_direction[direction]], set_all_false(output))
 
                         input = tile.input_direction.copy()
                         del input[direction]
-                        self.clauses += implies([splitter_type, tile.output_direction[direction]], set_number(0, input))
+                        self.clauses += implies([splitter_type, tile.output_direction[direction]], set_all_false(input))
 
                 for direction in range(4):
                     # Cannot input from same side as output
@@ -169,7 +169,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     tile_a = self.get_tile_instance(x, y)
                     tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
 
-                    if tile_b in (BLOCKED_TILE, IGNORED_TILE):
+                    if isinstance(tile_b, TileResult):
                         continue
 
                     if direction % 2 == 0:
@@ -216,9 +216,9 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     ]
 
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
-                    if tile_b == BLOCKED_TILE:
+                    if tile_b == TileResult.BLOCKED:
                         self.clauses.append(clause)
-                    elif tile_b != IGNORED_TILE:
+                    elif tile_b != TileResult.IGNORED:
                         clause.append(tile_b.underground[direction])
                         self.clauses.append(clause)
 
@@ -228,17 +228,17 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                         *tile_a.is_splitter,
                     ]
                     tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
-                    if tile_b == BLOCKED_TILE:
+                    if tile_b == TileResult.BLOCKED:
                         self.clauses.append(clause)
-                    elif tile_b != IGNORED_TILE:
+                    elif tile_b != TileResult.IGNORED:
                         clause.append(tile_b.underground[direction])
                         self.clauses.append(clause)
 
                     # Underground segment must propagate or have output
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
-                    if tile_b == BLOCKED_TILE:
+                    if tile_b == TileResult.BLOCKED:
                         self.clauses.append([-tile_a.underground[direction]])
-                    elif tile_b != IGNORED_TILE:
+                    elif tile_b != TileResult.IGNORED:
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]], 
                             [
@@ -250,9 +250,9 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                         )
                     
                     tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
-                    if tile_b == BLOCKED_TILE:
+                    if tile_b == TileResult.BLOCKED:
                         self.clauses.append([-tile_a.underground[direction]])
-                    elif tile_b != IGNORED_TILE:
+                    elif tile_b != TileResult.IGNORED:
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]], 
                             [
@@ -266,6 +266,9 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
     def set_maximum_underground_length(self, length: int, edge_mode: EdgeModeType):
         assert length >= 1
 
+        if length == float('inf'):
+            return
+
         for direction in range(4):
             dx, dy = direction_to_vec(direction)
             for x in range(self.width):
@@ -274,7 +277,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     for i in range(length + 1):
                         tile = self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
 
-                        if tile in (BLOCKED_TILE, IGNORED_TILE):
+                        if isinstance(tile, TileResult):
                             break
                         
                         clause.append(-tile.underground[direction])
@@ -290,14 +293,14 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     dx, dy = direction_to_vec(direction)
 
                     tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
-                    if tile_b == BLOCKED_TILE:
+                    if tile_b == TileResult.BLOCKED:
                         self.clauses += [
                             [-tile_a.output_direction[direction]],
                             [-tile_a.input_direction[inv_direction]],
                             *implies([tile_a.input_direction[direction]],      [[-lit] for lit in tile_a.is_splitter]),
                             *implies([tile_a.output_direction[inv_direction]], [[-lit] for lit in tile_a.is_splitter]),
                         ]
-                    elif tile_b != IGNORED_TILE:
+                    elif tile_b != TileResult.IGNORED:
                         self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
 
                         # Handles special splitter output case

@@ -1,10 +1,12 @@
 import numpy as np
 
 from util import *
-from template import BLOCKED_TILE, EDGE_MODE_BLOCK, IGNORED_TILE, EdgeModeType
+from template import TileResult, EdgeMode, EdgeModeType
 from solver import Grid
 
 def prevent_empty_along_underground(grid: Grid, underground_length: int, edge_mode: EdgeModeType):
+    underground_length = min(underground_length, max(grid.width, grid.height) - 2)
+
     for direction in range(4):
         dx, dy = direction_to_vec(direction)
         for x in range(grid.width):
@@ -12,7 +14,7 @@ def prevent_empty_along_underground(grid: Grid, underground_length: int, edge_mo
                 tiles = [grid.get_tile_instance(x, y)]
                 for i in range(1, underground_length+2):
                     new_tile = grid.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
-                    if new_tile in (BLOCKED_TILE, IGNORED_TILE):
+                    if isinstance(new_tile, TileResult):
                         break
 
                     tiles.append(new_tile)
@@ -81,10 +83,10 @@ def glue_splitters(grid: Grid):
                 dx0, dy0 = direction_to_vec(direction)
                 dx1, dy1 = direction_to_vec((direction + 1) % 4)
 
-                tile_in0 = grid.get_tile_instance_offset(x, y, -dx0, -dy0, EDGE_MODE_BLOCK)
-                tile_in1 = grid.get_tile_instance_offset(x, y, -dx0 + dx1, -dy0 + dy1, EDGE_MODE_BLOCK)
+                tile_in0 = grid.get_tile_instance_offset(x, y, -dx0, -dy0, EdgeMode.BLOCK)
+                tile_in1 = grid.get_tile_instance_offset(x, y, -dx0 + dx1, -dy0 + dy1, EdgeMode.BLOCK)
 
-                if tile_in0 == BLOCKED_TILE or tile_in1 == BLOCKED_TILE:
+                if tile_in0 == TileResult.BLOCKED or tile_in1 == TileResult.BLOCKED:
                     continue
 
                 grid.clauses.append([
@@ -108,7 +110,7 @@ def shrink_underground(grid: Grid, edge_mode: EdgeModeType):
             for direction in range(4):
                 dx0, dy0 = direction_to_vec(direction)
                 tile_b = grid.get_tile_instance_offset(x, y, dx0, dy0, edge_mode)
-                if tile_b == BLOCKED_TILE or tile_b == IGNORED_TILE:
+                if tile_b == TileResult.BLOCKED or tile_b == TileResult.IGNORED:
                     continue
                 
                 grid.clauses += implies([
@@ -121,7 +123,52 @@ def shrink_underground(grid: Grid, edge_mode: EdgeModeType):
                     -tile_b.underground[direction],
                 ], [set_not_number(0, tile_a.all_direction)])
 
+def expand_underground_infinite(grid: Grid, min_x: int=0, min_y: int=0, max_x: Optional[int]=None, max_y: Optional[int]=None):
+    if max_x is None:
+        max_x = grid.width - 1
+    if max_y is None:
+        max_y = grid.height - 1
+
+    for x in range(min_x, max_x + 1):
+        for y in range(min_y, max_y + 1):
+            for direction in range(4):
+                dx, dy = direction_to_vec(direction)
+
+                far_x = x + dx * 2
+                far_y = y + dy * 2
+                if far_x > max_x or far_y > max_y or far_x < min_x or far_y < min_y:
+                    continue
+
+                tiles = [grid.get_tile_instance_offset(x, y, dx*i, dy*i, EdgeMode.BLOCK) for i in range(3)]
+                assert all(tile != TileResult.BLOCKED for tile in tiles)
+
+                # BI--O
+                grid.clauses.append([
+                    -tiles[0].input_direction[direction],
+                    -tiles[0].output_direction[direction], 
+                    *tiles[0].is_splitter,
+
+                     tiles[1].underground[direction],
+                    
+                    -tiles[2].underground[direction],
+                ])
+
+                # I--OB
+                grid.clauses.append([
+                    -tiles[0].underground[direction],
+
+                     tiles[1].underground[direction],
+
+                    -tiles[2].input_direction[direction],
+                    -tiles[2].output_direction[direction], 
+                    *tiles[2].is_splitter,
+                ])
+
 def expand_underground(grid: Grid, underground_length: int, min_x: int=0, min_y: int=0, max_x: Optional[int]=None, max_y: Optional[int]=None):
+    if underground_length == float('inf'):
+        expand_underground_infinite(grid, min_x, min_y, max_x, max_y)
+        return
+    
     if underground_length < 2:
         return
     
@@ -140,9 +187,8 @@ def expand_underground(grid: Grid, underground_length: int, min_x: int=0, min_y:
                 if far_x > max_x or far_y > max_y or far_x < min_x or far_y < min_y:
                     continue
 
-                tiles = [grid.get_tile_instance_offset(x, y, dx*i, dy*i, EDGE_MODE_BLOCK) for i in range(underground_length + 2)]
-                if any(tile == BLOCKED_TILE for tile in tiles):
-                    assert False
+                tiles = [grid.get_tile_instance_offset(x, y, dx*i, dy*i, EdgeMode.BLOCK) for i in range(underground_length + 2)]
+                assert all(tile != TileResult.BLOCKED for tile in tiles)
 
                 # BI--O
                 grid.clauses.append([
@@ -188,7 +234,7 @@ def prevent_belt_hooks(grid: Grid, edge_mode: EdgeModeType):
                     tile10 = grid.get_tile_instance_offset(x, y, dx1, dy1, edge_mode)
                     tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, edge_mode)
 
-                    if any(tile == BLOCKED_TILE or tile == IGNORED_TILE for tile in (tile01, tile10, tile11)):
+                    if any(tile == TileResult.BLOCKED or tile == TileResult.IGNORED for tile in (tile01, tile10, tile11)):
                         continue
 
                     for in_direction in (direction, tangent):
@@ -221,6 +267,8 @@ def get_mergeable_underground_variations(underground_length: int):
         ]
 
 def prevent_mergeable_underground(grid: Grid, underground_length: int, edge_mode: EdgeModeType):
+    underground_length = min(underground_length, max(grid.width, grid.height) - 2)
+
     if underground_length < 4:
         return
     
@@ -229,7 +277,7 @@ def prevent_mergeable_underground(grid: Grid, underground_length: int, edge_mode
             for direction in range(4):
                 dx, dy = direction_to_vec(direction)
                 tiles = [grid.get_tile_instance_offset(x, y, dx*i, dy*i, edge_mode) for i in range(underground_length + 2)]
-                if any(tile == BLOCKED_TILE or tile == IGNORED_TILE for tile in tiles):
+                if any(tile == TileResult.BLOCKED or tile == TileResult.IGNORED for tile in tiles):
                     continue
 
                 for variation in get_mergeable_underground_variations(underground_length):
@@ -249,18 +297,20 @@ def prevent_semicircles(grid: Grid, edge_mode: EdgeModeType):
 
                     tiles = np.frompyfunc(lambda j, i: grid.get_tile_instance_offset(x, y, dx0*i + dx1*j, dy0*i + dy1*j, edge_mode), 2, 1)(*np.ogrid[0:2, 0:3])
 
-                    if (tiles == BLOCKED_TILE).any() or (tiles == IGNORED_TILE).any():
+                    if (tiles == TileResult.BLOCKED).any() or (tiles == TileResult.IGNORED).any():
                         continue
 
                     for in_direction in (direction, tangent):
                         for out_direction in (inverse_tangent, direction):
                             grid.clauses.append([
                                 -tiles[0,0].input_direction[in_direction],
+                                *(tiles[0,0].is_splitter if tangent == in_direction else []),
 
                                 *tiles[0,1].all_direction,
 
                                 -tiles[0,2].input_direction[inverse_tangent],
                                 -tiles[0,2].output_direction[out_direction],
+                                *(tiles[0,2].is_splitter if inverse_tangent == out_direction else []),
 
                                 -tiles[1,0].input_direction[tangent],
 
@@ -279,11 +329,11 @@ def prevent_underground_hook(grid: Grid, edge_mode: EdgeModeType):
                 dx0, dy0 = direction_to_vec(direction)
                 
                 tile_empty = grid.get_tile_instance_offset(x, y, dx0, dy0, edge_mode)
-                if tile_empty == BLOCKED_TILE or tile_empty == IGNORED_TILE:
+                if tile_empty == TileResult.BLOCKED or tile_empty == TileResult.IGNORED:
                     continue
 
                 tile_a = grid.get_tile_instance_offset(x, y, -dx0, -dy0, edge_mode)
-                if tile_a == BLOCKED_TILE or tile_a == IGNORED_TILE:
+                if tile_a == TileResult.BLOCKED or tile_a == TileResult.IGNORED:
                     continue
 
                 inv_direction = (direction + 2) % 4
@@ -294,10 +344,10 @@ def prevent_underground_hook(grid: Grid, edge_mode: EdgeModeType):
                     dx1, dy1 = direction_to_vec(tangent)
 
                     tile_b = grid.get_tile_instance_offset(x, y, -dx1 - dx0, -dy1 - dy0, edge_mode)
-                    if tile_b == BLOCKED_TILE or tile_b == IGNORED_TILE:
+                    if tile_b == TileResult.BLOCKED or tile_b == TileResult.IGNORED:
                         continue
                     tile_c = grid.get_tile_instance_offset(x, y, -dx1, -dy1, edge_mode)
-                    if tile_c == BLOCKED_TILE or tile_c == IGNORED_TILE:
+                    if tile_c == TileResult.BLOCKED or tile_c == TileResult.IGNORED:
                         continue
 
                     for in_direction in (inv_direction, tangent):
@@ -342,7 +392,7 @@ def prevent_zigzags(grid: Grid, edge_mode: EdgeModeType):
         for tangent in (direction + 1, direction + 3):
             tangent %= 4
             for tiles in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec(tangent), 2, edge_mode):
-                if (tiles == BLOCKED_TILE).any() or (tiles == IGNORED_TILE).any():
+                if (tiles == TileResult.BLOCKED).any() or (tiles == TileResult.IGNORED).any():
                     continue
 
                 grid.clauses.append([
@@ -404,10 +454,10 @@ def prevent_spirals(grid: Grid):
         for across_direction in (direction + 1, direction + 3):
             across_direction %= 4
             inv_across_direction = (across_direction + 2) % 4
-            for block in grid.iterate_tile_blocks(direction_to_vec(across_direction), 3, direction_to_vec(direction), 3, EDGE_MODE_BLOCK):
+            for block in grid.iterate_tile_blocks(direction_to_vec(across_direction), 3, direction_to_vec(direction), 3, EdgeMode.BLOCK):
                 block[0, 0] = None # Unimportant tile
 
-                if (block == BLOCKED_TILE).any():
+                if (block == TileResult.BLOCKED).any():
                     continue
                 
                 for spiral_input_direction in (across_direction, direction):
@@ -465,12 +515,71 @@ def prevent_spirals(grid: Grid):
                         # block[1, 1].input_direction[inv_direction],
                     ]))
 
+def prevent_belt_parallel_splitter(grid: Grid, edge_mode: EdgeModeType):
+    for direction in range(4):
+        for across_direction, splitter_side in ((direction + 1, 0), (direction + 3, 1)):
+            across_direction %= 4
+            for block in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec(across_direction), 2, edge_mode):
+                if (block == TileResult.BLOCKED).any() or (block == TileResult.IGNORED).any():
+                    continue
+
+                for in_direction in (direction, across_direction):
+                    grid.clauses.append(invert_components([
+                        block[0,0].input_direction[in_direction],
+                        block[0,0].output_direction[direction],
+
+                        *([-block[0,0].is_splitter[0], -block[0,0].is_splitter[1]] if in_direction == direction else []),
+
+                        block[1,0].output_direction[across_direction],
+
+                        block[1,1].is_splitter[splitter_side],
+                    ]))
+
+def glue_partial_splitters(grid: Grid, edge_mode: EdgeModeType):
+    for direction in range(4):
+        across_direction = (direction + 1) % 4
+        for block in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec(across_direction), 2, edge_mode, max_x=grid.width-2):
+            if (block == TileResult.BLOCKED).any() or (block == TileResult.IGNORED).any():
+                continue
+
+            grid.clauses.append(invert_components([
+                 block[0,0].input_direction[direction],
+                 block[0,0].is_splitter[0],
+
+                -block[1,0].input_direction[direction],
+
+                 block[0,1].input_direction[direction],
+                 block[0,1].output_direction[direction],
+                 *invert_components(block[0,1].is_splitter),
+
+                 block[1,1].input_direction[direction],
+                 block[1,1].output_direction[direction],
+                 *invert_components(block[1,1].is_splitter),
+            ]))
+
+            grid.clauses.append(invert_components([
+                -block[0,0].input_direction[direction],
+
+                 block[1,0].input_direction[direction],
+                 block[1,0].is_splitter[1],
+
+                 block[0,1].input_direction[direction],
+                 block[0,1].output_direction[direction],
+                 *invert_components(block[0,1].is_splitter),
+
+                 block[1,1].input_direction[direction],
+                 block[1,1].output_direction[direction],
+                 *invert_components(block[1,1].is_splitter),
+            ]))
+
 def apply_generic_optimisations(grid: Grid, underground_length: int):
     prevent_small_loops(grid)
-    prevent_empty_along_underground(grid, underground_length, EDGE_MODE_BLOCK)
+    prevent_empty_along_underground(grid, underground_length, EdgeMode.BLOCK)
     glue_splitters(grid)
-    prevent_belt_hooks(grid, EDGE_MODE_BLOCK)
-    prevent_mergeable_underground(grid, underground_length, EDGE_MODE_BLOCK)
-    prevent_semicircles(grid, EDGE_MODE_BLOCK)
-    prevent_underground_hook(grid, EDGE_MODE_BLOCK)
-    prevent_zigzags(grid, EDGE_MODE_BLOCK)
+    prevent_belt_hooks(grid, EdgeMode.BLOCK)
+    prevent_mergeable_underground(grid, underground_length, EdgeMode.BLOCK)
+    prevent_semicircles(grid, EdgeMode.BLOCK)
+    prevent_underground_hook(grid, EdgeMode.BLOCK)
+    prevent_zigzags(grid, EdgeMode.BLOCK)
+    prevent_belt_parallel_splitter(grid, EdgeMode.BLOCK)
+    glue_partial_splitters(grid, EdgeMode.BLOCK)

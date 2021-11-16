@@ -1,7 +1,7 @@
 import argparse, sys, json
 from util import *
 
-from template import EdgeModeType, BLOCKED_TILE, IGNORED_TILE, EDGE_MODE_BLOCK, EDGE_MODE_TILE
+from template import EdgeModeType, TileResult, EdgeMode
 import solver, optimisations
 
 def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
@@ -19,7 +19,7 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
                 tile_b = grid.get_tile_instance_offset(x, y, dx, dy, edge_mode)
                 x1, y1 = x + dx, y + dy
 
-                if tile_b in (BLOCKED_TILE, IGNORED_TILE):
+                if isinstance(tile_b, TileResult):
                     continue
 
                 if direction % 2 == 0:
@@ -46,7 +46,7 @@ def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
             tile_a = grid.get_tile_instance(x, y)
             for direction in range(2):
                 tile_b = grid.get_tile_instance_offset(x, y, *direction_to_vec(direction + 1), edge_mode)
-                if tile_b == BLOCKED_TILE or tile_b == IGNORED_TILE:
+                if tile_b == TileResult.BLOCKED or tile_b == TileResult.IGNORED:
                     continue
 
                 grid.clauses.append([-tile_a.underground[direction + 0], -tile_b.underground[direction + 0]])
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     else:
         grid = solver.Grid(args.width, args.height, 1)
 
-    edge_mode = EDGE_MODE_TILE if args.tile else EDGE_MODE_BLOCK
+    edge_mode = EdgeMode.TILE if args.tile else EdgeMode.BLOCK
 
     grid.prevent_intersection(edge_mode)
     grid.prevent_bad_undergrounding(edge_mode)
@@ -103,9 +103,9 @@ if __name__ == '__main__':
             grid.clauses.append(tile.all_direction) # Ban Empty
 
         if args.underground_length == 0: # Ban underground
-            grid.clauses += set_number(0, tile.underground)
+            grid.clauses += set_all_false(tile.underground)
 
-        grid.clauses += set_number(0, tile.is_splitter) # Ban splitters
+        grid.clauses += set_all_false(tile.is_splitter) # Ban splitters
     
     if args.output is not None:
         with args.output:

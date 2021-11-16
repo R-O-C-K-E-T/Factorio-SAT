@@ -1,6 +1,6 @@
 import argparse, json, sys
 import numpy as np
-from template import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE
+from template import EdgeMode
 
 from util import *
 from network import open_network, deduplicate_network
@@ -30,8 +30,8 @@ if __name__ == '__main__':
             grid.set_tile(x, y, tiles[y, x])
 
     print(len(grid.clauses), file=sys.stderr)
-    grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
-    grid.prevent_intersection(EDGE_MODE_IGNORE)
+    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
+    grid.prevent_intersection(EdgeMode.IGNORE)
 
     solution = grid.solve()
     if solution is not None:

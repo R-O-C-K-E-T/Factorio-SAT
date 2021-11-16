@@ -3,7 +3,7 @@ from cardinality import quadratic_amo, quadratic_one
 
 from fractions import Fraction
 from collections import Counter
-from template import EDGE_MODE_BLOCK, EDGE_MODE_IGNORE, OneHotTemplate
+from template import EdgeMode, OneHotTemplate
 
 import solver2
 from util import *
@@ -189,18 +189,18 @@ if __name__ == '__main__':
         'assembler_type' : OneHotTemplate(len(assemblers)),
     })
 
-    grid.setup_multitile_entities(EDGE_MODE_BLOCK)
+    grid.setup_multitile_entities(EdgeMode.BLOCK)
 
-    grid.prevent_intersection(EDGE_MODE_IGNORE)
-    grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
-    grid.set_maximum_underground_length(4, EDGE_MODE_BLOCK)
-    grid.prevent_empty_along_underground(4, EDGE_MODE_BLOCK)
+    grid.prevent_intersection(EdgeMode.IGNORE)
+    grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
+    grid.set_maximum_underground_length(4, EdgeMode.BLOCK)
+    grid.prevent_empty_along_underground(4, EdgeMode.BLOCK)
 
-    grid.prevent_bad_colouring(EDGE_MODE_BLOCK)
-    grid.prevent_bad_flow(EDGE_MODE_BLOCK)
+    grid.prevent_bad_colouring(EdgeMode.BLOCK)
+    grid.prevent_bad_flow(EdgeMode.BLOCK)
 
-    grid.prevent_bad_insertion(EDGE_MODE_BLOCK)
-    grid.enforce_flow_summation(EDGE_MODE_IGNORE)
+    grid.prevent_bad_insertion(EdgeMode.BLOCK)
+    grid.enforce_flow_summation(EdgeMode.IGNORE)
     grid.enforce_insertion_side()
 
     for colour in range(len(colour_mapping), 1<<colour_bits):
@@ -214,8 +214,8 @@ if __name__ == '__main__':
             tile = grid.get_tile_instance(x, y)
             grid.clauses += quadratic_amo(tile.assembler_type)
             grid.clauses += implies([tile.assembling_x[0], tile.assembling_y[0]], [tile.assembler_type])
-            grid.clauses += implies([-tile.assembling_x[0]], set_number(0, tile.assembler_type))
-            grid.clauses += implies([-tile.assembling_y[0]], set_number(0, tile.assembler_type))
+            grid.clauses += implies([-tile.assembling_x[0]], set_all_false(tile.assembler_type))
+            grid.clauses += implies([-tile.assembling_y[0]], set_all_false(tile.assembler_type))
 
     for x in (0, grid.width - 1):
         for y in (0, grid.height - 1):
@@ -229,7 +229,7 @@ if __name__ == '__main__':
     for pos, literals in zip(edge_tiles, zip(*output_literals, *input_literals)):
         tile = grid.get_tile_instance(*pos)
         grid.clauses += quadratic_amo(literals)
-        grid.clauses += implies([tile.is_empty], set_number(0, literals))
+        grid.clauses += implies([tile.is_empty], set_all_false(literals))
         grid.clauses += implies(invert_components(literals), [[tile.is_empty]])
 
 

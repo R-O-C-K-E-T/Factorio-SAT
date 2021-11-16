@@ -2,7 +2,7 @@ from cardinality import library_equals, quadratic_one
 import argparse, json
 
 from solver import Grid, Belt
-from template import OneHotTemplate, EDGE_MODE_BLOCK, EDGE_MODE_IGNORE, BLOCKED_TILE
+from template import OneHotTemplate, EdgeMode, TileResult
 from util import *
 import belt_balancer, optimisations
 
@@ -17,18 +17,18 @@ def create_balancer(width: int, height: int) -> Grid:
 
     grid = Grid(width, height, 2**(height // 2), {'level': OneHotTemplate(levels), 'level_primary': OneHotTemplate(levels)})
     
-    grid.prevent_bad_undergrounding(EDGE_MODE_BLOCK)
-    grid.prevent_bad_colouring(EDGE_MODE_BLOCK)
+    grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
+    grid.prevent_bad_colouring(EdgeMode.BLOCK)
 
     for tile in grid.iterate_tiles():
         for is_splitter in tile.is_splitter:
             grid.clauses += implies([is_splitter], [tile.input_direction, tile.output_direction])
         grid.clauses += implies([tile.is_splitter[0]], quadratic_one(tile.level))
         grid.clauses += implies([tile.is_splitter[1]], quadratic_one(tile.level))
-        grid.clauses += implies(invert_components(tile.is_splitter), set_number(0, tile.level))
+        grid.clauses += implies(invert_components(tile.is_splitter), set_all_false(tile.level))
 
         grid.clauses += implies([tile.is_splitter[0]], set_numbers_equal(tile.level, tile.level_primary))
-        grid.clauses += implies([-tile.is_splitter[0]], set_number(0, tile.level_primary))
+        grid.clauses += implies([-tile.is_splitter[0]], set_all_false(tile.level_primary))
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -46,11 +46,11 @@ def create_balancer(width: int, height: int) -> Grid:
                     tile00.input_direction[direction],   
                 ]
                 
-                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EDGE_MODE_BLOCK)
-                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EDGE_MODE_BLOCK)
-                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EDGE_MODE_BLOCK)
+                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.BLOCK)
+                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.BLOCK)
+                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.BLOCK)
 
-                if any(tile == BLOCKED_TILE for tile in (tile00, tile10, tile01, tile11)):
+                if any(tile == TileResult.BLOCKED for tile in (tile00, tile10, tile01, tile11)):
                     grid.clauses.append(invert_components(precondition))
                     continue
 
@@ -96,10 +96,13 @@ if __name__ == '__main__':
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
     args = parser.parse_args()
 
-    grid = create_balancer(args.width, args.size)
-    grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
+    if args.underground_length == -1:
+        args.underground_length = float('inf')
 
-    grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
+    grid = create_balancer(args.width, args.size)
+    grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
+
+    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
 
     optimisations.expand_underground(grid, args.underground_length, min_x=1, max_x=grid.width-1)
     optimisations.apply_generic_optimisations(grid, args.underground_length)
@@ -111,8 +114,8 @@ if __name__ == '__main__':
 
 
     # shadow_grid = Grid(grid.width, grid.height, 1, pool=grid.pool)
-    # shadow_grid.prevent_intersection((EDGE_MODE_IGNORE, EDGE_MODE_BLOCK))
-    # shadow_grid.set_maximum_underground_length(args.underground_length, EDGE_MODE_BLOCK)
+    # shadow_grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
+    # shadow_grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
 
     # for y in range(shadow_grid.height):
     #     shadow_grid.set_tile(0, y, Belt(0, 0))
