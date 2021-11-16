@@ -41,21 +41,22 @@ python fetch.py /path/to/factorio/install
 
 ## Tools
 
-| Tool                 | Usage                                                    |
-| --------------------      | -------------------------------------------------------- |
-| fetch.py                  | Load textures (required for render.py)                   |
-| blueprint.py              | Import/Export blueprints                                 |
-| blueprint_book.py         | Pack/Unpack blueprint books                              |
-| render.py                 | Render generated balancers                               |
-| network.py                | Tools for managing balancer networks                     |
-| belt_balancer.py          | Generate balancer from a network                         |
-| belt_balancer_new_free.py | Generate n to n balancers where n is a power of 2        |
-| interchange.py            | Generate an interchange for building composite balancers |
-| make_block.py             | Generate random blocks of belts                          |
-| calculate_optimal.py      | Find optimal balancers                                   |
-| rotate.py                 | Rotate a balancer 90 degrees                             |
-| stringifier.py            | Convert balancers to and from text                       |
-| test_runner.py            | Run the test suite                                       |
+| Tool                                 | Usage                                                                            |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| fetch.py                             | Load textures (required for render.py)                                           |
+| blueprint.py                         | Import/Export blueprints                                                         |
+| blueprint_book.py                    | Pack/Unpack blueprint books                                                      |
+| render.py                            | Render generated balancers                                                       |
+| network.py                           | Tools for managing balancer networks                                             |
+| belt_balancer.py                     | Generate balancer from a network                                                 |
+| belt_balancer_net_free.py            | Generate any n to n balancer                                                     |
+| belt_balancer_net_free_power_of_2.py | Generates n to n balancers where n is a power of 2 (faster than generic version) |
+| interchange.py                       | Generate an interchange for building composite balancers                         |
+| make_block.py                        | Generate random blocks of belts                                                  |
+| calculate_optimal.py                 | Find optimal balancers                                                           |
+| rotate.py                            | Rotate a balancer 90 degrees                                                     |
+| stringifier.py                       | Convert balancers to and from text                                               |
+| test_runner.py                       | Run the test suite                                                               |
 
 ## Controls (render.py)
 | Key | Usage                          |

@@ -155,6 +155,12 @@ class StackTracingList(list):
             trace = ', '.join(format(basename(file), lineno) for file, lineno in stack)
             print(trace + ' ' * (trace_length - len(trace)) + ' - ' + str(count))
 
+def get_nested_attrib(object: Any, attrib: str) -> Any:
+    result = object
+    for piece in attrib.split('.'):
+        result = getattr(result, piece)
+    return result
+
 def add_numbers(input_a: List[LiteralType], input_b: List[LiteralType], output: List[LiteralType], allocator: AllocatorType, carry_in: Optional[LiteralType]=None, allow_overflow=False) -> ClauseList:
     assert len(input_a) == len(input_b)
     assert len(output) in (len(input_a), len(input_a) + 1)
@@ -437,6 +443,10 @@ def make_allocator(initial: int) -> AllocatorType:
         value += 1
         return value
     return allocator
+
+def make_fixed_allocator(literals: List[LiteralType]) -> AllocatorType:
+    iterator = iter(literals)
+    return lambda: next(iterator)
 
 T = TypeVar('T')
 def combinations(items: List[T], size: int) -> Generator[List[T], None, None]:
