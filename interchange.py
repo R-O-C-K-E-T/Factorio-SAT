@@ -77,7 +77,7 @@ if __name__ == '__main__':
     if args.height % 2 == 1:
         raise RuntimeError('Height not multiple of 2')
 
-    grid = Grid(args.width, args.height, 2)
+    grid = Grid(args.width, args.height, 2, args.underground_length)
 
 
     # No splitters
@@ -108,10 +108,10 @@ if __name__ == '__main__':
     grid.prevent_bad_colouring(EdgeMode.BLOCK)
 
     grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
-    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
+    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
 
-    optimisations.expand_underground(grid, args.underground_length)
-    optimisations.apply_generic_optimisations(grid, args.underground_length)
+    optimisations.expand_underground(grid)
+    optimisations.apply_generic_optimisations(grid)
     optimisations.break_vertical_symmetry(grid)
     optimisations.break_horisontal_symmetry(grid)
     optimisations.prevent_spirals(grid)

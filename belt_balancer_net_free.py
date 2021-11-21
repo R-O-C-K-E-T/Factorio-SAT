@@ -17,7 +17,7 @@ def lcm(*args):
 def next_power_of_two(x: int) -> int:
     return 1 << max(x - 1, 0).bit_length()
 
-def create_n_to_n_balancer(width: int, height: int, size: int) -> Grid:
+def create_n_to_n_balancer(width: int, height: int, underground_length: int, size: int) -> Grid:
     assert width > 0
     assert height > 0
     assert size > 0
@@ -30,7 +30,7 @@ def create_n_to_n_balancer(width: int, height: int, size: int) -> Grid:
     full_flow = size * denominator # 2x2 -> 2, 3x3 -> 6, 4x4 -> 4, 5x5 -> 40, 6x6 -> 12
     flow_bits = full_flow.bit_length()
     
-    grid = Grid(width, height, None, {
+    grid = Grid(width, height, None, underground_length, {
         'flow'       : ArrayTemplate(NumberTemplate(flow_bits), (size - 1,)),
         'flow_diff'  : ArrayTemplate(BoolTemplate(), (size - 1, flow_bits)),
         'flow_carry' : ArrayTemplate(BoolTemplate(), (size - 1, flow_bits - 1)),
@@ -47,7 +47,7 @@ def create_n_to_n_balancer(width: int, height: int, size: int) -> Grid:
         for flow_component in tile.flow:
             grid.clauses += set_maximum(full_flow, flow_component)
 
-    grid.transport_quantity('flow', 'flow_ux', 'flow_uy', EdgeMode.BLOCK)
+    grid.transport_quantity(lambda tile: tile.flow, lambda tile: tile.flow_ux, lambda tile: tile.flow_uy, EdgeMode.BLOCK)
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -98,14 +98,14 @@ def create_n_to_n_balancer(width: int, height: int, size: int) -> Grid:
 
     return grid
 
-def create_n_to_m_balancer(width: int, height: int, input_count: int, output_count: int) -> Grid:
+def create_n_to_m_balancer(width: int, height: int, underground_length: int, input_count: int, output_count: int) -> Grid:
     assert width > 0
     assert height > 0
     assert input_count > 0
     assert output_count > 0
 
     if input_count == output_count:
-        return create_n_to_n_balancer(width, height, input_count)
+        return create_n_to_n_balancer(width, height, underground_length, input_count)
 
     # 1x2 -> 2, 1x3 -> 3, 1x4 -> 4, 1x5 -> 5, 1x6 -> 6, 1x7 -> 7, 2x2 -> 2, 2x3 -> 6, 2x4 -> 4, 2x5 -> 10, 
     # full_flow = 40
@@ -123,7 +123,7 @@ def create_n_to_m_balancer(width: int, height: int, input_count: int, output_cou
     print(forward_input_flow, forward_output_flow, backward_input_flow, backward_output_flow, file=sys.stderr)
 
     flow_bits = max_belt_flow.bit_length()
-    grid = Grid(width, height, None, {
+    grid = Grid(width, height, None, underground_length, {
         'forward': {
             'flow'  : ArrayTemplate(NumberTemplate(flow_bits), (input_count,)),
             'diff'  : ArrayTemplate(BoolTemplate(), (input_count, flow_bits)),
@@ -150,8 +150,8 @@ def create_n_to_m_balancer(width: int, height: int, input_count: int, output_cou
             top_bits = [flow_component[-1] for flow_component in flow_direction]
             grid.clauses += quadratic_amo(top_bits)
 
-    grid.transport_quantity('forward.flow',  'forward.ux',  'forward.uy', EdgeMode.BLOCK)
-    grid.transport_quantity('backward.flow', 'backward.ux', 'backward.uy', EdgeMode.BLOCK)
+    grid.transport_quantity(lambda tile: tile.forward.flow,  lambda tile: tile.forward.ux,  lambda tile: tile.forward.uy, EdgeMode.BLOCK)
+    grid.transport_quantity(lambda tile: tile.backward.flow, lambda tile: tile.backward.ux, lambda tile: tile.backward.uy, EdgeMode.BLOCK)
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -356,16 +356,16 @@ if __name__ == '__main__':
         # raise RuntimeWarning('Different sized inputs does not always produce good/correct results')
         warnings.warn('Different sized inputs does not always produce good/correct results', RuntimeWarning)
 
-    grid = create_n_to_m_balancer(args.width, args.height, args.input_count, args.output_count)
+    grid = create_n_to_m_balancer(args.width, args.height, args.underground_length, args.input_count, args.output_count)
 
     setup_balancer_ends(grid, args.input_count, args.output_count, args.aligned)
  
     grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
 
-    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
+    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
 
-    optimisations.expand_underground(grid, args.underground_length, min_x=1, max_x=grid.width-2)
-    optimisations.apply_generic_optimisations(grid, args.underground_length)
+    optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
+    optimisations.apply_generic_optimisations(grid)
     optimisations.break_vertical_symmetry(grid)
     belt_balancer.prevent_double_edge_belts(grid)
 

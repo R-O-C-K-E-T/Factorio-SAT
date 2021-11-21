@@ -36,9 +36,8 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
 
                 grid.clauses += implies([tile_a.input_direction[direction], *invert_components(tile_a.output_direction)], increment_number(tile_a.colour, colour_b))
 
-                for i in range(len(tile_a.colour)):
-                    grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]], literals_same(colour_a[i], tile_b.colour[i]))
-                    grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], literals_same(colour_a[i], colour_b[i]))  
+                grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]], set_numbers_equal(colour_a, tile_b.colour))
+                grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], set_numbers_equal(colour_a, colour_b))  
 
 def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
     for x in range(grid.width):
@@ -76,7 +75,7 @@ if __name__ == '__main__':
     if args.underground_length < 0:
         raise RuntimeError('Underground length cannot be negative')
     if args.single_loop:
-        grid = solver.Grid(args.width, args.height, args.width * args.height)
+        grid = solver.Grid(args.width, args.height, args.width * args.height, args.underground_length)
     else:
         grid = solver.Grid(args.width, args.height, 1)
 
@@ -87,9 +86,9 @@ if __name__ == '__main__':
 
     optimisations.prevent_small_loops(grid)
     
-    if args.underground_length > 0:
-        optimisations.prevent_empty_along_underground(grid, args.underground_length, edge_mode)
-        grid.set_maximum_underground_length(args.underground_length, edge_mode)
+    if grid.underground_length > 0:
+        grid.enforce_maximum_underground_length(edge_mode)
+        optimisations.prevent_empty_along_underground(grid, edge_mode)
 
     if args.no_parallel:
         prevent_parallel(grid, edge_mode)

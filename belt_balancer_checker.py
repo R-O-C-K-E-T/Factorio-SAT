@@ -24,13 +24,13 @@ if __name__ == '__main__':
 
     network = deduplicate_network(network)
 
-    grid = belt_balancer.create_balancer(network, tiles.shape[1], tiles.shape[0])
+    grid = belt_balancer.create_balancer(network, tiles.shape[1], tiles.shape[0], args.underground_length)
     for y in range(grid.height):
         for x in range(grid.width):
             grid.set_tile(x, y, tiles[y, x])
 
     print(len(grid.clauses), file=sys.stderr)
-    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
+    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
     grid.prevent_intersection(EdgeMode.IGNORE)
 
     solution = grid.solve()

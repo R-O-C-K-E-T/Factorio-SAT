@@ -42,17 +42,17 @@ class TestCase:
         if 'network' in self.params:
             network = open_network(self.params['network'])
             network = deduplicate_network(network)
-            grid = belt_balancer.create_balancer(network, self.tiles.shape[1], self.tiles.shape[0])
+            grid = belt_balancer.create_balancer(network, self.tiles.shape[1], self.tiles.shape[0], underground_length)
         else:
-            grid = Grid(self.tiles.shape[1], self.tiles.shape[0], 1)
+            grid = Grid(self.tiles.shape[1], self.tiles.shape[0], 1, underground_length)
             grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
 
         rule = self.params.get('rule')
         if rule is not None:
             if rule == 'expand-underground':
-                optimisations.expand_underground(grid, underground_length)
+                optimisations.expand_underground(grid)
             elif rule == 'prevent-mergeable-underground':
-                optimisations.prevent_mergeable_underground(grid, underground_length, EdgeMode.BLOCK)
+                optimisations.prevent_mergeable_underground(grid, EdgeMode.BLOCK)
             elif rule == 'glue-splitters':
                 optimisations.glue_splitters(grid)
             elif rule == 'prevent-belt-hooks':
@@ -74,7 +74,7 @@ class TestCase:
             else:
                 raise RuntimeError(f'Unknown rule "{rule}"')
 
-        grid.set_maximum_underground_length(underground_length, EdgeMode.BLOCK)
+        grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
         
         grid.prevent_intersection(EdgeMode.IGNORE)
         for y, row in enumerate(self.tiles):

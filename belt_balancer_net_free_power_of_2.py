@@ -7,7 +7,7 @@ from util import *
 import belt_balancer, optimisations
 
 
-def create_balancer(width: int, height: int) -> Grid:
+def create_balancer(width: int, height: int, underground_length: int) -> Grid:
     assert width > 0
     assert height > 0
     assert is_power_of_two(height)
@@ -15,7 +15,7 @@ def create_balancer(width: int, height: int) -> Grid:
     levels = int(math.log2(height)) - 2
 
 
-    grid = Grid(width, height, 2**(height // 2), {'level': OneHotTemplate(levels), 'level_primary': OneHotTemplate(levels)})
+    grid = Grid(width, height, 2**(height // 2), underground_length, {'level': OneHotTemplate(levels), 'level_primary': OneHotTemplate(levels)})
     
     grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
     grid.prevent_bad_colouring(EdgeMode.BLOCK)
@@ -99,13 +99,13 @@ if __name__ == '__main__':
     if args.underground_length == -1:
         args.underground_length = float('inf')
 
-    grid = create_balancer(args.width, args.size)
+    grid = create_balancer(args.width, args.size, args.underground_length)
     grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
 
-    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
+    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
 
-    optimisations.expand_underground(grid, args.underground_length, min_x=1, max_x=grid.width-1)
-    optimisations.apply_generic_optimisations(grid, args.underground_length)
+    optimisations.expand_underground(grid, min_x=1, max_x=grid.width-1)
+    optimisations.apply_generic_optimisations(grid)
     optimisations.break_vertical_symmetry(grid)
     # optimisations.break_horisontal_symmetry(grid, 1, grid.width - 2)
 
@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
     # shadow_grid = Grid(grid.width, grid.height, 1, pool=grid.pool)
     # shadow_grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
-    # shadow_grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
+    # shadow_grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
 
     # for y in range(shadow_grid.height):
     #     shadow_grid.set_tile(0, y, Belt(0, 0))
@@ -138,8 +138,8 @@ if __name__ == '__main__':
     #             [shadow_tile.output_direction[direction]],
     #         ])
 
-    # optimisations.expand_underground(shadow_grid, args.underground_length, min_x=1, max_x=grid.width-1)
-    # optimisations.apply_generic_optimisations(shadow_grid, args.underground_length)
+    # optimisations.expand_underground(shadow_grid, min_x=1, max_x=grid.width-1)
+    # optimisations.apply_generic_optimisations(shadow_grid)
 
     # grid.clauses += shadow_grid.clauses
 

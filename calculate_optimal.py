@@ -1,4 +1,3 @@
-from asyncio.tasks import gather
 import json, math, os, asyncio, argparse
 import concurrent.futures
 import numpy as np
@@ -37,15 +36,15 @@ def solve_balancer(network, size, solver):
     maximum_underground_length, width, height = size
 
     network = deduplicate_network(network)
-    grid = belt_balancer.create_balancer(network, width, height)
+    grid = belt_balancer.create_balancer(network, width, height, maximum_underground_length)
     grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
     belt_balancer.setup_balancer_ends(grid, network, True)
 
-    optimisations.expand_underground(grid, maximum_underground_length, min_x=1, max_x=grid.width-2)
-    optimisations.apply_generic_optimisations(grid, maximum_underground_length)
+    optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
+    optimisations.apply_generic_optimisations(grid)
 
     belt_balancer.enforce_edge_splitters(grid, network)
-    grid.set_maximum_underground_length(maximum_underground_length, EdgeMode.BLOCK)
+    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
     
     solution = grid.solve(solver)
     if solution is None:

@@ -18,9 +18,11 @@ class TileTemplate(Protocol):
     colour_uy: List[LiteralType]
 
 class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
-    def __init__(self, width: int, height: int, colours: Optional[int], extras: CompositeTemplateParams={}, pool: Optional[IDPool]=None):
+    def __init__(self, width: int, height: int, colours: Optional[int], underground_length: int=4, extras: CompositeTemplateParams={}, pool: Optional[IDPool]=None):
         assert colours is None or colours >= 1
+        assert underground_length >= 0
         self.colours = colours
+        self.underground_length = underground_length
 
 
         template = {
@@ -158,7 +160,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
         tile = self.get_tile_instance(x, y)
         self.clauses += set_number(colour, tile.colour)
 
-    def transport_quantity(self, quantity: str, quantity_ux: str, quantity_uy: str, edge_mode: EdgeModeType):
+    def transport_quantity(self, quantity: Callable[[TileTemplate], NestedArray[LiteralType]], quantity_ux: Callable[[TileTemplate], NestedArray[LiteralType]], quantity_uy: Callable[[TileTemplate], NestedArray[LiteralType]], edge_mode: EdgeModeType):
         for direction in range(4):
             dx, dy = direction_to_vec(direction)
             for x in range(self.width):
@@ -169,15 +171,15 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     if isinstance(tile_b, TileResult):
                         continue
 
-                    quantity_a = flatten(get_nested_attrib(tile_a, quantity))
-                    quantity_b = flatten(get_nested_attrib(tile_b, quantity))
+                    quantity_a = flatten(quantity(tile_a))
+                    quantity_b = flatten(quantity(tile_b))
 
                     if direction % 2 == 0:
-                        quantity_ua = flatten(get_nested_attrib(tile_a, quantity_ux))
-                        quantity_ub = flatten(get_nested_attrib(tile_b, quantity_ux))
+                        quantity_ua = flatten(quantity_ux(tile_a))
+                        quantity_ub = flatten(quantity_ux(tile_b))
                     else:
-                        quantity_ua = flatten(get_nested_attrib(tile_a, quantity_uy))
-                        quantity_ub = flatten(get_nested_attrib(tile_b, quantity_uy))
+                        quantity_ua = flatten(quantity_uy(tile_a))
+                        quantity_ub = flatten(quantity_uy(tile_b))
 
                     # Belt quantity consistent
                     self.clauses += implies([tile_a.output_direction[direction],  *invert_components(tile_a.is_splitter)], set_numbers_equal(quantity_a, quantity_b))
@@ -193,7 +195,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
     def prevent_bad_colouring(self, edge_mode: EdgeModeType):
         if self.colours == 1:
             return
-        self.transport_quantity('colour', 'colour_ux', 'colour_uy', edge_mode)
+        self.transport_quantity(lambda tile: tile.colour, lambda tile: tile.colour_ux, lambda tile: tile.colour_uy, edge_mode)
         
     def prevent_bad_undergrounding(self, edge_mode: EdgeModeType):
         for direction in range(4):
@@ -269,10 +271,10 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                             ]
                         )
     
-    def set_maximum_underground_length(self, length: int, edge_mode: EdgeModeType):
-        assert length >= 1
+    def enforce_maximum_underground_length(self, edge_mode: EdgeModeType):
+        assert self.underground_length >= 1
 
-        if length == float('inf'):
+        if self.underground_length == float('inf'):
             return
 
         for direction in range(4):
@@ -280,7 +282,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
             for x in range(self.width):
                 for y in range(self.height):
                     clause = []
-                    for i in range(length + 1):
+                    for i in range(self.underground_length + 1):
                         tile = self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
 
                         if isinstance(tile, TileResult):

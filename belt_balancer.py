@@ -68,7 +68,7 @@ def setup_balancer_ends(grid: Grid, network, aligned: bool):
             for i, end_offset in enumerate(end_offsets):
                 grid.clauses += implies([end_offset], [start_offsets[i:(i + 1 + output_count - input_count)]])
 
-def create_balancer(network, width: int, height: int) -> Grid:
+def create_balancer(network, width: int, height: int, underground_length: int) -> Grid:
     assert width > 0 and height > 0
 
     all_colours = set()
@@ -77,7 +77,7 @@ def create_balancer(network, width: int, height: int) -> Grid:
             all_colours.add(colour)
     all_colours.discard(None)
 
-    grid = Grid(width, height, max(all_colours) + 1, {'node': OneHotTemplate(len(network))})
+    grid = Grid(width, height, max(all_colours) + 1, underground_length, {'node': OneHotTemplate(len(network))})
     for colour in range(max(all_colours) + 1):
         if colour in all_colours:
             continue
@@ -248,7 +248,7 @@ if __name__ == '__main__':
 
     network = deduplicate_network(network)
 
-    grid = create_balancer(network, args.width, args.height)
+    grid = create_balancer(network, args.width, args.height, args.underground_length)
     grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
 
     if args.edge_splitters or args.fast:
@@ -258,9 +258,9 @@ if __name__ == '__main__':
     if args.glue_splitters or args.fast:
         optimisations.glue_splitters(grid)
     if args.expand_underground or args.fast:
-        optimisations.expand_underground(grid, args.underground_length, min_x=1, max_x=grid.width-2)
+        optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
     if args.prevent_mergeable_underground or args.fast:
-        optimisations.prevent_mergeable_underground(grid, args.underground_length, EdgeMode.BLOCK)
+        optimisations.prevent_mergeable_underground(grid, EdgeMode.BLOCK)
     if args.break_symmetry:
         optimisations.break_vertical_symmetry(grid)
     if args.prevent_bad_patterns or args.fast:
@@ -269,8 +269,8 @@ if __name__ == '__main__':
         optimisations.prevent_small_loops(grid)
 
     #setup_balancer_ends_with_offsets(grid, network, 1, 0)#args.start_offset, args.end_offset)
-    grid.set_maximum_underground_length(args.underground_length, EdgeMode.BLOCK)
-    optimisations.prevent_empty_along_underground(grid, args.underground_length, EdgeMode.BLOCK)
+    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
+    optimisations.prevent_empty_along_underground(grid, EdgeMode.BLOCK)
 
     setup_balancer_ends(grid, network, args.aligned)
 
