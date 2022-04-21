@@ -95,5 +95,7 @@ python make_block.py 16 16 --all --single-loop | head -n 50 | python blueprint.p
 ## Examples
 ![](/pictures/2to3.gif)
 ![](/pictures/6to6.gif)\
+![](/pictures/4to4_corner.gif)
+![](/pictures/6to6_corner.gif)\
 ![](/pictures/interchange.gif)
 ![](/pictures/block.gif)
