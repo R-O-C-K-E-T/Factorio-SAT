@@ -2,7 +2,7 @@ from cardinality import quadratic_amo, quadratic_one
 from typing import *
 
 import numpy as np
-from template import TileResult, ArrayTemplate, BaseGrid, BoolTemplate, CompositeTemplateParams, EdgeModeType, NumberTemplate, OneHotTemplate
+from template import ArrayTemplate, BaseGrid, BoolTemplate, CompositeTemplateParams, EdgeModeType, NumberTemplate, OneHotTemplate
 
 from util import *
 
@@ -84,12 +84,10 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     inv_direction = (direction + 2) % 4
                     tile_b = self.get_tile_instance_offset(x, y, *direction_to_vec((direction + 1) % 4), edge_mode)
 
-                    if tile_b == TileResult.BLOCKED:
+                    if tile_b is None:
                         # If no room for splitter's complementary side, then splitter cannot be placed here with then given direction
                         self.clauses.append([-tile_a.is_splitter, tile_a.splitter_side, -tile_a.splitter_direction[direction]])
                         self.clauses.append([-tile_a.is_splitter, -tile_a.splitter_side, -tile_a.splitter_direction[inv_direction]])
-                        continue
-                    if tile_b == TileResult.IGNORED:
                         continue
                     
                     self.clauses += implies([tile_a.is_splitter, -tile_a.splitter_side, tile_a.splitter_direction[direction]], [[tile_b.is_splitter], [tile_b.splitter_side], [tile_b.splitter_direction[direction]]])
@@ -154,7 +152,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     tile_a = self.get_tile_instance(x, y)
                     tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
 
-                    if isinstance(tile_b, TileResult):
+                    if tile_b is None:
                         continue
 
                     if direction % 2 == 0:
@@ -202,9 +200,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     ]
 
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses.append(clause)
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         clause.append(tile_b.underground[direction])
                         self.clauses.append(clause)
 
@@ -213,17 +209,13 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                         -tile_a.output_direction[direction],
                     ]
                     tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses.append(clause)
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         clause.append(tile_b.underground[direction])
                         self.clauses.append(clause)
 
                     # Underground segment must propagate or have output
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses.append([-tile_a.underground[direction]])
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]], 
                             [
@@ -233,9 +225,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                         )
                     
                     tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses.append([-tile_a.underground[direction]])
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]], 
                             [
@@ -255,7 +245,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     for i in range(length + 1):
                         tile = self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
 
-                        if isinstance(tile, TileResult):
+                        if tile is None:
                             break
                         
                         clause.append(-tile.underground[direction])
@@ -267,17 +257,10 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
             for y in range(self.height):
                 tile_a = self.get_tile_instance(x, y)
                 for direction in range(4):
-                    inv_direction = (direction + 2) % 4
                     dx, dy = direction_to_vec(direction)
 
                     tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses += [
-                            [-tile_a.output_direction[direction]],
-                            [-tile_a.input_direction[inv_direction]],
-                            [-tile_a.splitter_direction[direction]],
-                        ]
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
 
                         # Handles special splitter output case
@@ -298,7 +281,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     tiles = [self.get_tile_instance(x, y)]
                     for i in range(1, length + 2):
                         new_tile = self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
-                        if isinstance(new_tile, TileResult):
+                        if new_tile is None:
                             break
 
                         tiles.append(new_tile)
@@ -356,8 +339,8 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     -tile01.output_direction[1],
                 ])
 
-    def itersolve(self, ignore_colour=False, solver='g3'):
-        important_variables = set()
+    def itersolve(self, important_variables=set(), ignore_colour=False, solver='g3'):
+        important_variables = set(important_variables)
         for x in range(self.width):
             for y in range(self.height):
                 tile = self.get_tile_instance(x, y)

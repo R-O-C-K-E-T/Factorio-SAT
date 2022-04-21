@@ -30,8 +30,8 @@ if __name__ == '__main__':
             grid.set_tile(x, y, tiles[y, x])
 
     print(len(grid.clauses), file=sys.stderr)
-    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
-    grid.prevent_intersection(EdgeMode.IGNORE)
+    grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
+    grid.prevent_intersection(EdgeMode.NO_WRAP)
 
     solution = grid.solve()
     if solution is not None:

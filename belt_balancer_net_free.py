@@ -2,7 +2,7 @@ from cardinality import library_equals, quadratic_amo, quadratic_one
 import argparse, json, sys, math, warnings
 
 from solver import Grid
-from template import TileResult, ArrayTemplate, BoolTemplate, NumberTemplate, EdgeMode, flatten
+from template import ArrayTemplate, BoolTemplate, NumberTemplate, EdgeMode, flatten
 from util import *
 import belt_balancer, optimisations
 
@@ -38,7 +38,8 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
         'flow_uy'    : ArrayTemplate(NumberTemplate(flow_bits), (size - 1,)),
     })
 
-    grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
+    grid.block_underground_through_edges()
+    grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
 
     for tile in grid.iterate_tiles():
         for is_splitter in tile.is_splitter:
@@ -47,7 +48,7 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
         for flow_component in tile.flow:
             grid.clauses += set_maximum(full_flow, flow_component)
 
-    grid.transport_quantity(lambda tile: tile.flow, lambda tile: tile.flow_ux, lambda tile: tile.flow_uy, EdgeMode.BLOCK)
+    grid.transport_quantity(lambda tile: tile.flow, lambda tile: tile.flow_ux, lambda tile: tile.flow_uy, EdgeMode.NO_WRAP)
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -61,11 +62,11 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
                     tile00.input_direction[direction],   
                 ]
                 
-                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.BLOCK)
-                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.BLOCK)
-                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.BLOCK)
+                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.NO_WRAP)
+                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.NO_WRAP)
+                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.NO_WRAP)
 
-                if any(tile == TileResult.BLOCKED for tile in (tile00, tile10, tile01, tile11)):
+                if any(tile is None for tile in (tile00, tile10, tile01, tile11)):
                     continue
 
                 for in_flow0, in_flow1, flow_carry, out_flow0, out_flow1 in zip(tile00.flow, tile01.flow, tile00.flow_carry, tile10.flow, tile11.flow):
@@ -140,7 +141,8 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
         },
     })
 
-    grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
+    grid.block_underground_through_edges()
+    grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
 
     for tile in grid.iterate_tiles():
         for flow_component in tile.forward.flow + tile.backward.flow:
@@ -150,8 +152,8 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
             top_bits = [flow_component[-1] for flow_component in flow_direction]
             grid.clauses += quadratic_amo(top_bits)
 
-    grid.transport_quantity(lambda tile: tile.forward.flow,  lambda tile: tile.forward.ux,  lambda tile: tile.forward.uy, EdgeMode.BLOCK)
-    grid.transport_quantity(lambda tile: tile.backward.flow, lambda tile: tile.backward.ux, lambda tile: tile.backward.uy, EdgeMode.BLOCK)
+    grid.transport_quantity(lambda tile: tile.forward.flow,  lambda tile: tile.forward.ux,  lambda tile: tile.forward.uy, EdgeMode.NO_WRAP)
+    grid.transport_quantity(lambda tile: tile.backward.flow, lambda tile: tile.backward.ux, lambda tile: tile.backward.uy, EdgeMode.NO_WRAP)
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -160,11 +162,11 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
                 dx0, dy0 = direction_to_vec(direction)
                 dx1, dy1 = direction_to_vec((direction + 1) % 4)
 
-                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.BLOCK)
-                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.BLOCK)
-                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.BLOCK)
+                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.NO_WRAP)
+                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.NO_WRAP)
+                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.NO_WRAP)
 
-                if any(tile == TileResult.BLOCKED for tile in (tile00, tile10, tile01, tile11)):
+                if any(tile is None for tile in (tile00, tile10, tile01, tile11)):
                     continue
 
 
@@ -360,16 +362,18 @@ if __name__ == '__main__':
 
     setup_balancer_ends(grid, args.input_count, args.output_count, args.aligned)
  
-    grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
+    grid.block_belts_through_edges((False, True))
+    grid.prevent_intersection(EdgeMode.NO_WRAP)
 
-    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
+    grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
 
     optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
     optimisations.apply_generic_optimisations(grid)
-    optimisations.break_vertical_symmetry(grid)
+    # This optimisation likely conflicts with other optimisations
+    #optimisations.break_vertical_symmetry(grid)
     belt_balancer.prevent_double_edge_belts(grid)
 
-    for solution in grid.itersolve(True, args.solver):
+    for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
         print(json.dumps(solution.tolist()))
         if not args.all:
             break

@@ -14,13 +14,9 @@ from ipasir import IPASIRLibrary
 from util import *
 
 class EdgeMode(enum.Enum):
-    IGNORE = enum.auto()
-    BLOCK  = enum.auto()
-    TILE   = enum.auto()
+    NO_WRAP = enum.auto()
+    WRAP   = enum.auto()
 
-class TileResult(enum.Enum):
-    IGNORED = enum.auto()
-    BLOCKED = enum.auto()
 
 EdgeModeType = Union[Tuple[EdgeMode, EdgeMode], EdgeMode]
 
@@ -311,7 +307,7 @@ class BaseGrid(Generic[I, P]):
 
                 yield np.frompyfunc(lambda i, j: self.get_tile_instance_offset(x, y, rx*i + cx*j, ry*i + cy*j, edge_mode), 2, 1)(*np.ogrid[0:row_count, 0:column_count])
 
-    def iterate_tile_lines(self, direction: Tuple[int, int], length: int, edge_mode: EdgeModeType) -> Iterator[Sequence[I]]:
+    def iterate_tile_lines(self, direction: Tuple[int, int], length: int, edge_mode: EdgeModeType) -> Iterator[Sequence[Optional[I]]]:
         dx, dy = direction
         assert abs(dx) + abs(dy) == 1
         assert length > 0
@@ -327,26 +323,20 @@ class BaseGrid(Generic[I, P]):
         assert x >= 0 and y >= 0 and x < self.width and y < self.height
         return self.tiles[y, x]
 
-    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int, edge_mode: EdgeModeType) -> Union[TileResult, I]:
+    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int, edge_mode: EdgeModeType) -> Optional[I]:
         edge_mode = expand_edge_mode(edge_mode)
         
         pos = [x + dx, y + dy]
         size = self.width, self.height
 
-        is_ignored = False
         for i in range(2):
             if pos[i] < 0 or pos[i] >= size[i]:
-                if edge_mode[i] == EdgeMode.TILE:
+                if edge_mode[i] == EdgeMode.WRAP:
                     pos[i] = pos[i] % size[i]
-                elif edge_mode[i] == EdgeMode.BLOCK:
-                    return TileResult.BLOCKED
-                elif edge_mode[i] == EdgeMode.IGNORE:
-                    is_ignored = True
+                elif edge_mode[i] == EdgeMode.NO_WRAP:
+                    return None
                 else:
                     assert False
-        
-        if is_ignored:
-            return TileResult.IGNORED
 
         return self.get_tile_instance(*pos)
 

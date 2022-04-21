@@ -37,14 +37,15 @@ def solve_balancer(network, size, solver):
 
     network = deduplicate_network(network)
     grid = belt_balancer.create_balancer(network, width, height, maximum_underground_length)
-    grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
+    grid.block_belts_through_edges((False, True))
+    grid.prevent_intersection(EdgeMode.NO_WRAP)
     belt_balancer.setup_balancer_ends(grid, network, True)
 
     optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
     optimisations.apply_generic_optimisations(grid)
 
     belt_balancer.enforce_edge_splitters(grid, network)
-    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
+    grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
     
     solution = grid.solve(solver)
     if solution is None:

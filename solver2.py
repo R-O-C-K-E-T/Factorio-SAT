@@ -144,12 +144,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
 
                     # Splitter must have complementary side
                     tile_b = self.get_tile_instance_offset(x, y, *direction_to_vec((direction + 1) % 4), edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses += [
-                            [-tile_a.colour_direction[direction],     -tile_a.is_splitter[0]],
-                            [-tile_a.colour_direction[inv_direction], -tile_a.is_splitter[1]],
-                        ]
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         self.clauses += implies(
                             [tile_a.colour_direction[direction], tile_a.is_splitter[0]], 
                             [[tile_b.is_splitter[1]], [tile_b.colour_direction[direction]]]
@@ -162,31 +157,23 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                 
                 # Assembling machine must be 3x3
                 tile_b = self.get_tile_instance_offset(x, y, +1,  0, edge_mode)
-                if tile_b == TileResult.BLOCKED:
-                    self.clauses += [[-tile_a.assembling_x[1]], [-tile_a.assembling_x[0]]]
-                elif tile_b != TileResult.IGNORED:
+                if tile_b is not None:
                     self.clauses += literals_same(tile_a.assembling_x[1], tile_b.assembling_x[2])
                     for i in range(3):
                         self.clauses += implies([tile_a.is_assembling_machine, tile_b.is_assembling_machine], literals_same(tile_a.assembling_y[i], tile_b.assembling_y[i]))
 
                 tile_b = self.get_tile_instance_offset(x, y, -1,  0, edge_mode)
-                if tile_b == TileResult.BLOCKED:
-                    self.clauses += [[-tile_a.assembling_x[1]], [-tile_a.assembling_x[2]]]
-                elif tile_b != TileResult.IGNORED:
+                if tile_b is not None:
                     self.clauses += literals_same(tile_a.assembling_x[1], tile_b.assembling_x[0])
                     for i in range(3):
                         self.clauses += implies([tile_a.is_assembling_machine, tile_b.is_assembling_machine], literals_same(tile_a.assembling_y[i], tile_b.assembling_y[i]))
                 
                 tile_b = self.get_tile_instance_offset(x, y,  0, +1, edge_mode)
-                if tile_b == TileResult.BLOCKED:
-                    self.clauses += [[-tile_a.assembling_y[1]], [-tile_a.assembling_y[0]]]
-                elif tile_b != TileResult.IGNORED:
+                if tile_b is not None:
                     self.clauses += literals_same(tile_a.assembling_y[1], tile_b.assembling_y[2])
 
                 tile_b = self.get_tile_instance_offset(x, y,  0, -1, edge_mode)
-                if tile_b == TileResult.BLOCKED:
-                    self.clauses += [[-tile_a.assembling_y[1]], [-tile_a.assembling_y[2]]]
-                elif tile_b != TileResult.IGNORED:
+                if tile_b is not None:
                     self.clauses += literals_same(tile_a.assembling_y[1], tile_b.assembling_y[0])
 
     def prevent_intersection(self, edge_mode: EdgeModeType):
@@ -198,14 +185,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     dx, dy = direction_to_vec(direction)
 
                     tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses += [
-                            [-tile_a.output_direction[direction]],
-                            [-tile_a.input_direction[inv_direction]],
-                            [-tile_a.colour_direction[direction]],
-                            [-tile_a.colour_direction[inv_direction]]
-                        ]
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
 
                         # Handles special output case where there is no output flow, but the belt/splitter is pointing into an invalid tile
@@ -243,9 +223,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     ]
                     
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses.append(clause)
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         clause.append(tile_b.underground[direction])
                         self.clauses.append(clause)
 
@@ -256,18 +234,14 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     ]
                     
                     tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses.append(clause)
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         clause.append(tile_b.underground[direction])
                         self.clauses.append(clause)
 
                     
 
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses.append([-tile_a.underground[direction]])
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]], 
                             [
@@ -277,9 +251,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                         )
                     
                     tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
-                    if tile_b == TileResult.BLOCKED:
-                        self.clauses.append([-tile_a.underground[direction]])
-                    elif tile_b != TileResult.IGNORED:
+                    if tile_b is not None:
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]], 
                             [
@@ -299,7 +271,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     for i in range(length + 1):
                         tile = self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
 
-                        if isinstance(tile, TileResult):
+                        if tile is None:
                             break
 
                         clause.append(-tile.underground[direction])
@@ -317,7 +289,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     tiles = [self.get_tile_instance(x, y)]
                     for i in range(1, maximum_underground_length + 2):
                         new_tile = self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
-                        if isinstance(new_tile, TileResult):
+                        if new_tile is None:
                             break
 
                         tiles.append(new_tile)
@@ -341,7 +313,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     tile_a = self.get_tile_instance(x, y)
                     tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
 
-                    if not isinstance(tile_b, TileResult):
+                    if tile_b is not None:
                         if direction % 2 == 0:
                             colour_a = tile_a.colour_ux
                             colour_b = tile_b.colour_ux
@@ -361,7 +333,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                             self.clauses += implies([tile_b.output_direction[direction], tile_b.is_underground_out], set_numbers_equal(colour_a[side], tile_b.colour[side]))
                     
                     tile_b = self.get_tile_instance_offset(x, y, *(direction_to_vec((direction + 1) % 4)), edge_mode)
-                    if not isinstance(tile_b, TileResult):
+                    if tile_b is not None:
                         for side in range(2):
                             # Complementary side has same colours
                             self.clauses += implies([tile_a.is_splitter[0], tile_a.colour_direction[direction]], set_numbers_equal(tile_a.colour[side], tile_b.colour[side]))
@@ -379,11 +351,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                         tile_a = self.get_tile_instance_offset(x, y, dx * -inserter_offset, dy * -inserter_offset, edge_mode)
                         tile_c = self.get_tile_instance_offset(x, y, dx * +inserter_offset, dy * +inserter_offset, edge_mode)
 
-                        if tile_a == TileResult.BLOCKED or tile_c == TileResult.BLOCKED:
-                            self.clauses.append([-tile_b.is_inserter[inserter_type], -tile_b.inserter_direction[direction]])
-                            continue
-                            
-                        if tile_a == TileResult.IGNORED or tile_c == TileResult.IGNORED:
+                        if tile_a is None or tile_c is None:
                             continue
 
                         # TODO remove restriction
@@ -411,16 +379,13 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                         dx, dy = direction_to_vec(direction)
                         tile_b = self.get_tile_instance_offset(x, y, dx * inserter_offset, dy * inserter_offset, edge_mode)
 
-                        if tile_b == TileResult.IGNORED:
+                        if tile_b is None:
                             continue
 
                         blocking_clauses = set_all_false(tile_a.flow_placed[0][inserter_type][direction] + tile_a.flow_placed[1][inserter_type][direction])
 
-                        if tile_b == TileResult.BLOCKED:
-                            self.clauses += blocking_clauses
-                        else:
-                            self.clauses += implies([-tile_b.is_inserter[inserter_type]], blocking_clauses)
-                            self.clauses += implies([-tile_b.inserter_direction[direction], -tile_b.inserter_direction[(direction + 2) % 4]], blocking_clauses)
+                        self.clauses += implies([-tile_b.is_inserter[inserter_type]], blocking_clauses)
+                        self.clauses += implies([-tile_b.inserter_direction[direction], -tile_b.inserter_direction[(direction + 2) % 4]], blocking_clauses)
 
     def enforce_flow_summation(self, edge_mode: EdgeModeType):
         always_true = self.allocate_variable()
@@ -447,7 +412,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                 for direction in range(4):
                     tile_b = self.get_tile_instance_offset(x, y, *direction_to_vec((direction + 1) % 4), edge_mode)
 
-                    if isinstance(tile_b, TileResult):
+                    if tile_b is None:
                         continue
 
                     for side in range(2):
@@ -496,19 +461,20 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
                     dx, dy = direction_to_vec(direction)
                     tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
 
-                    if not isinstance(tile_b, TileResult):
-                        for side in range(2):
-                            self.clauses += implies([tile_a.output_direction[direction]], set_numbers_equal(tile_a.flow_out[side], tile_b.flow_in[side]))
+                    if tile_b is None:
+                        continue
+                    for side in range(2):
+                        self.clauses += implies([tile_a.output_direction[direction]], set_numbers_equal(tile_a.flow_out[side], tile_b.flow_in[side]))
 
-                            if direction % 2 == 0:
-                                flow_ua = tile_a.flow_ux
-                                flow_ub = tile_b.flow_ux
-                            else:
-                                flow_ua = tile_a.flow_uy
-                                flow_ub = tile_b.flow_uy
+                        if direction % 2 == 0:
+                            flow_ua = tile_a.flow_ux
+                            flow_ub = tile_b.flow_ux
+                        else:
+                            flow_ua = tile_a.flow_uy
+                            flow_ub = tile_b.flow_uy
 
-                            self.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], set_numbers_equal(flow_ua[side], flow_ub[side]))
+                        self.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], set_numbers_equal(flow_ua[side], flow_ub[side]))
 
-                            self.clauses += implies([tile_a.input_direction[direction], tile_a.is_underground_in], set_numbers_equal(tile_a.flow_out[side], flow_ub[side]))
-                            self.clauses += implies([tile_b.output_direction[direction], tile_b.is_underground_out], set_numbers_equal(flow_ua[side], tile_b.flow_in[side]))
-                            
+                        self.clauses += implies([tile_a.input_direction[direction], tile_a.is_underground_in], set_numbers_equal(tile_a.flow_out[side], flow_ub[side]))
+                        self.clauses += implies([tile_b.output_direction[direction], tile_b.is_underground_out], set_numbers_equal(flow_ua[side], tile_b.flow_in[side]))
+                        

@@ -1,7 +1,7 @@
 import argparse, sys, json
 from util import *
 
-from template import EdgeModeType, TileResult, EdgeMode
+from template import EdgeModeType, EdgeMode
 import solver, optimisations
 
 def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
@@ -19,7 +19,7 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
                 tile_b = grid.get_tile_instance_offset(x, y, dx, dy, edge_mode)
                 x1, y1 = x + dx, y + dy
 
-                if isinstance(tile_b, TileResult):
+                if tile_b is None:
                     continue
 
                 if direction % 2 == 0:
@@ -45,7 +45,7 @@ def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
             tile_a = grid.get_tile_instance(x, y)
             for direction in range(2):
                 tile_b = grid.get_tile_instance_offset(x, y, *direction_to_vec(direction + 1), edge_mode)
-                if tile_b == TileResult.BLOCKED or tile_b == TileResult.IGNORED:
+                if tile_b is None:
                     continue
 
                 grid.clauses.append([-tile_a.underground[direction + 0], -tile_b.underground[direction + 0]])
@@ -79,10 +79,13 @@ if __name__ == '__main__':
     else:
         grid = solver.Grid(args.width, args.height, 1)
 
-    edge_mode = EdgeMode.TILE if args.tile else EdgeMode.BLOCK
+    edge_mode = EdgeMode.WRAP if args.tile else EdgeMode.NO_WRAP
 
     grid.prevent_intersection(edge_mode)
     grid.prevent_bad_undergrounding(edge_mode)
+    if not args.tile:
+        grid.block_belts_through_edges()
+        grid.block_underground_through_edges()
 
     optimisations.prevent_small_loops(grid)
     
@@ -108,13 +111,13 @@ if __name__ == '__main__':
     
     if args.output is not None:
         with args.output:
-            for solution in grid.itersolve(True, args.solver):
+            for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
                 json.dump(solution.tolist(), args.output)
                 args.output.write('\n')
                 if not args.all:
                     break
     else:
-        for i, solution in enumerate(grid.itersolve(True, args.solver)):
+        for i, solution in enumerate(grid.itersolve(solver=args.solver, ignore_colour=True)):
             print(json.dumps(solution.tolist()))
 
             if i == 0:

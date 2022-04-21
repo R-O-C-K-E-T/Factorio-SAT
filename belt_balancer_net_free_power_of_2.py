@@ -2,7 +2,7 @@ from cardinality import library_equals, quadratic_one
 import argparse, json
 
 from solver import Grid, Belt
-from template import OneHotTemplate, EdgeMode, TileResult
+from template import OneHotTemplate, EdgeMode
 from util import *
 import belt_balancer, optimisations
 
@@ -17,8 +17,9 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
 
     grid = Grid(width, height, 2**(height // 2), underground_length, {'level': OneHotTemplate(levels), 'level_primary': OneHotTemplate(levels)})
     
-    grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
-    grid.prevent_bad_colouring(EdgeMode.BLOCK)
+    grid.block_underground_through_edges()
+    grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
+    grid.prevent_bad_colouring(EdgeMode.NO_WRAP)
 
     for tile in grid.iterate_tiles():
         for is_splitter in tile.is_splitter:
@@ -46,11 +47,11 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
                     tile00.input_direction[direction],   
                 ]
                 
-                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.BLOCK)
-                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.BLOCK)
-                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.BLOCK)
+                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.NO_WRAP)
+                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.NO_WRAP)
+                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.NO_WRAP)
 
-                if any(tile == TileResult.BLOCKED for tile in (tile00, tile10, tile01, tile11)):
+                if any(tile is None for tile in (tile00, tile10, tile01, tile11)):
                     grid.clauses.append(invert_components(precondition))
                     continue
 
@@ -100,9 +101,11 @@ if __name__ == '__main__':
         args.underground_length = float('inf')
 
     grid = create_balancer(args.width, args.size, args.underground_length)
-    grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
 
-    grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
+    grid.block_belts_through_edges((False, True))
+    grid.prevent_intersection(EdgeMode.NO_WRAP)
+
+    grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
 
     optimisations.expand_underground(grid, min_x=1, max_x=grid.width-1)
     optimisations.apply_generic_optimisations(grid)
@@ -114,8 +117,8 @@ if __name__ == '__main__':
 
 
     # shadow_grid = Grid(grid.width, grid.height, 1, pool=grid.pool)
-    # shadow_grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.BLOCK))
-    # shadow_grid.enforce_maximum_underground_length(EdgeMode.BLOCK)
+    # shadow_grid.prevent_intersection((EdgeMode.IGNORE, EdgeMode.NO_WRAP))
+    # shadow_grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
 
     # for y in range(shadow_grid.height):
     #     shadow_grid.set_tile(0, y, Belt(0, 0))
@@ -143,7 +146,7 @@ if __name__ == '__main__':
 
     # grid.clauses += shadow_grid.clauses
 
-    for solution in grid.itersolve(True, args.solver):
+    for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
         print(json.dumps(solution.tolist()))
         if not args.all:
             break

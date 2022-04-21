@@ -189,18 +189,18 @@ if __name__ == '__main__':
         'assembler_type' : OneHotTemplate(len(assemblers)),
     })
 
-    grid.setup_multitile_entities(EdgeMode.BLOCK)
+    grid.setup_multitile_entities(EdgeMode.NO_WRAP)
 
-    grid.prevent_intersection(EdgeMode.IGNORE)
-    grid.prevent_bad_undergrounding(EdgeMode.BLOCK)
-    grid.set_maximum_underground_length(4, EdgeMode.BLOCK)
-    grid.prevent_empty_along_underground(4, EdgeMode.BLOCK)
+    grid.prevent_intersection(EdgeMode.NO_WRAP)
+    grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
+    grid.set_maximum_underground_length(4, EdgeMode.NO_WRAP)
+    grid.prevent_empty_along_underground(4, EdgeMode.NO_WRAP)
 
-    grid.prevent_bad_colouring(EdgeMode.BLOCK)
-    grid.prevent_bad_flow(EdgeMode.BLOCK)
+    grid.prevent_bad_colouring(EdgeMode.NO_WRAP)
+    grid.prevent_bad_flow(EdgeMode.NO_WRAP)
 
-    grid.prevent_bad_insertion(EdgeMode.BLOCK)
-    grid.enforce_flow_summation(EdgeMode.IGNORE)
+    grid.prevent_bad_insertion(EdgeMode.NO_WRAP)
+    grid.enforce_flow_summation(EdgeMode.NO_WRAP)
     grid.enforce_insertion_side()
 
     for colour in range(len(colour_mapping), 1<<colour_bits):
@@ -283,7 +283,7 @@ if __name__ == '__main__':
                 *set_number(colour, tile.colour[1]),
             ])
 
-    for solution in grid.itersolve(solver=args.solver):
+    for solution in grid.itersolve(solver=solver=args.solver):
         print(json.dumps(solution.tolist()))
         if not args.all:
             break
