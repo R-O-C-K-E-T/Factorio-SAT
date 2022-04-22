@@ -11,7 +11,8 @@ class TileTemplate(Protocol):
     input_direction: List[LiteralType]
     output_direction: List[LiteralType]
     all_direction: List[LiteralType]
-    is_splitter: List[LiteralType]
+    is_splitter: LiteralType
+    is_splitter_head: LiteralType
     underground: List[LiteralType]
     colour: List[LiteralType]
     colour_ux: List[LiteralType]
@@ -29,7 +30,8 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
             'input_direction'  : OneHotTemplate(4), 
             'output_direction' : OneHotTemplate(4), 
             'all_direction'    : lambda input_direction, output_direction: [*input_direction, *output_direction],
-            'is_splitter'      : OneHotTemplate(2), 
+            'is_splitter'      : BoolTemplate(), 
+            'is_splitter_head' : BoolTemplate(), 
             'underground'      : ArrayTemplate(BoolTemplate(), (4,)),
         }
         if colours is not None:
@@ -50,34 +52,32 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
         for tile in self.iterate_tiles():
             self.clauses += quadratic_amo(tile.input_direction)  # Have an input direction or nothing
             self.clauses += quadratic_amo(tile.output_direction) # Have an output direction or nothing
-            self.clauses += quadratic_amo(tile.is_splitter)      # Have a splitter type or nothing
 
             self.clauses += quadratic_amo(tile.underground[0::2]) # Have a underground along -x, +x or nothing
             self.clauses += quadratic_amo(tile.underground[1::2]) # Have a underground along -y, +y or nothing
 
-            # If the tile is a splitter, then it is not empty
-            self.clauses += implies([tile.is_splitter[0]], [tile.all_direction])
-            self.clauses += implies([tile.is_splitter[1]], [tile.all_direction])
+            # If a tile is a splitter, then it is not empty
+            self.clauses += implies([tile.is_splitter], [tile.all_direction])
+            # If a tile is a splitter head, then it is a splitter
+            self.clauses.append([-tile.is_splitter_head, tile.is_splitter])
 
             # Splitters must output the same side as their input or have no output
-            for splitter_type in tile.is_splitter:
-                for direction in range(4):
-                    output = tile.output_direction.copy()
-                    del output[direction]
+            for direction in range(4):
+                output = tile.output_direction.copy()
+                del output[direction]
 
-                    self.clauses += implies([splitter_type, tile.input_direction[direction]], set_all_false(output))
+                self.clauses += implies([tile.is_splitter, tile.input_direction[direction]], set_all_false(output))
 
-                    input = tile.input_direction.copy()
-                    del input[direction]
-                    self.clauses += implies([splitter_type, tile.output_direction[direction]], set_all_false(input))
+                input = tile.input_direction.copy()
+                del input[direction]
+                self.clauses += implies([tile.is_splitter, tile.output_direction[direction]], set_all_false(input))
 
             for direction in range(4):
                 # Cannot input from same side as output
                 self.clauses += quadratic_amo([tile.input_direction[direction], tile.output_direction[(direction + 2) % 4]])
 
                 # Cannot have a turn and be a splitter
-                for splitter in tile.is_splitter:
-                    self.clauses += implies([splitter, tile.input_direction[direction]], [[-tile.output_direction[(direction + 1) % 4]]])
+                self.clauses += implies([tile.is_splitter, tile.input_direction[direction]], [[-tile.output_direction[(direction + 1) % 4]]])
                 
             # Prevent colours beyond end of range
             if self.colours is not None:
@@ -89,58 +89,39 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
             for tile_a, tile_b in self.iterate_tile_lines(direction_to_vec((direction + 1) % 4), 2, EdgeMode.NO_WRAP):
                 if tile_b is None: # Prevent splitter overlapping edge of grid
                     self.clauses += [
-                            [-tile_a.input_direction[direction],      -tile_a.is_splitter[0]],
-                            [-tile_a.output_direction[direction],     -tile_a.is_splitter[0]],
-                            [-tile_a.input_direction[inv_direction],  -tile_a.is_splitter[1]],
-                            [-tile_a.output_direction[inv_direction], -tile_a.is_splitter[1]],
+                            [-tile_a.input_direction[direction],      -tile_a.is_splitter, -tile_a.is_splitter_head],
+                            [-tile_a.output_direction[direction],     -tile_a.is_splitter, -tile_a.is_splitter_head],
+                            [-tile_a.input_direction[inv_direction],  -tile_a.is_splitter,  tile_a.is_splitter_head],
+                            [-tile_a.output_direction[inv_direction], -tile_a.is_splitter,  tile_a.is_splitter_head],
                         ]
                     continue
                 for side in (tile_a.input_direction, tile_a.output_direction):
                     # Complementary side exists
-                    self.clauses.append([
-                        -side[direction],
-                        -tile_a.is_splitter[0],
-                            tile_b.is_splitter[1],
-                    ])
-
-                    self.clauses.append([
-                        -side[inv_direction],
-                        -tile_a.is_splitter[1],
-                            tile_b.is_splitter[0],
-                    ])
+                    self.clauses += implies([side[direction], tile_a.is_splitter_head], [[tile_b.is_splitter],[-tile_b.is_splitter_head]])
+                    self.clauses += implies([side[inv_direction], tile_a.is_splitter, -tile_a.is_splitter_head], [[tile_b.is_splitter_head]])
 
                     # Complementary side has input/output direction correct
-                    self.clauses.append([
-                        -side[direction],
-                        -tile_a.is_splitter[0],
-                        tile_b.input_direction[direction],
-                        tile_b.output_direction[direction],
-                    ])
-
-                    self.clauses.append([
-                        -side[inv_direction],
-                        -tile_a.is_splitter[1],
-                        tile_b.input_direction[inv_direction],
-                        tile_b.output_direction[inv_direction],
-                    ])
+                    self.clauses += implies([side[direction], tile_a.is_splitter_head], [[tile_b.input_direction[direction], tile_b.output_direction[direction]]])
+                    self.clauses += implies([side[inv_direction], tile_a.is_splitter, -tile_a.is_splitter_head], [[tile_b.input_direction[inv_direction], tile_b.output_direction[inv_direction]]])
     
     def set_tile(self, x: int, y: int, tile: Optional[BaseTile]):
         tile_instance = self.get_tile_instance(x, y)
 
         if tile is None:
-            self.clauses += [[-lit] for lit in tile_instance.all_direction + tile_instance.is_splitter]
+            self.clauses += set_all_false(tile_instance.all_direction)
         elif isinstance(tile, Splitter):
-            self.clauses.append([tile_instance.is_splitter[tile.side]])
+            self.clauses.append([tile_instance.is_splitter])
+            self.clauses.append([set_literal(tile_instance.is_splitter_head, tile.is_head)])
             self.clauses.append([tile_instance.input_direction[tile.direction], tile_instance.output_direction[tile.direction]])
         elif isinstance(tile, Belt) or isinstance(tile, UndergroundBelt):
-            self.clauses += [[-tile_instance.is_splitter[0]], [-tile_instance.is_splitter[1]]]
+            self.clauses += [[-tile_instance.is_splitter]]
             if tile.input_direction is None:
-                self.clauses += [[-lit] for lit in tile_instance.input_direction]
+                self.clauses += set_all_false(tile_instance.input_direction)
             else:
                 self.clauses += [[tile_instance.input_direction[tile.input_direction]]]
 
             if tile.output_direction is None:
-                self.clauses += [[-lit] for lit in tile_instance.output_direction]
+                self.clauses += set_all_false(tile_instance.output_direction)
             else:
                 self.clauses += [[tile_instance.output_direction[tile.output_direction]]]
         else:
@@ -182,14 +163,14 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                         quantity_ub = flatten(quantity_uy(tile_b))
 
                     # Belt quantity consistent
-                    self.clauses += implies([tile_a.output_direction[direction], *invert_components(tile_a.is_splitter)], set_numbers_equal(quantity_a, quantity_b))
+                    self.clauses += implies([tile_a.output_direction[direction], -tile_a.is_splitter], set_numbers_equal(quantity_a, quantity_b))
                     
                     # Underground quantity consistent
                     self.clauses += implies([tile_a.underground[direction]], set_numbers_equal(quantity_ua, quantity_ub))
 
                     # Underground transition consistent
-                    self.clauses += implies([tile_a.input_direction[direction], *invert_components(tile_a.output_direction + tile_a.is_splitter)], set_numbers_equal(quantity_a, quantity_ub))
-                    self.clauses += implies([tile_b.output_direction[direction], *invert_components(tile_b.input_direction + tile_b.is_splitter)], set_numbers_equal(quantity_ua, quantity_b))
+                    self.clauses += implies([tile_a.input_direction[direction], -tile_a.is_splitter, *invert_components(tile_a.output_direction)], set_numbers_equal(quantity_a, quantity_ub))
+                    self.clauses += implies([tile_b.output_direction[direction], -tile_b.is_splitter, *invert_components(tile_b.input_direction)], set_numbers_equal(quantity_ua, quantity_b))
     
 
     def prevent_bad_colouring(self, edge_mode: EdgeModeType):
@@ -211,26 +192,26 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
             for y in range(self.height):
                 tile = self.get_tile_instance(0, y)
                 self.clauses += set_all_false(tile.underground[0::2])
-                self.clauses.append([-tile.input_direction[2], *tile.output_direction, *tile.is_splitter])
-                self.clauses.append([-tile.output_direction[0], *tile.input_direction, *tile.is_splitter])
+                self.clauses.append([-tile.input_direction[2], *tile.output_direction, tile.is_splitter])
+                self.clauses.append([-tile.output_direction[0], *tile.input_direction, tile.is_splitter])
         if max_x_blocked:
             for y in range(self.height):
                 tile = self.get_tile_instance(self.width - 1, y)
                 self.clauses += set_all_false(tile.underground[0::2])
-                self.clauses.append([-tile.input_direction[0], *tile.output_direction, *tile.is_splitter])
-                self.clauses.append([-tile.output_direction[2], *tile.input_direction, *tile.is_splitter])
+                self.clauses.append([-tile.input_direction[0], *tile.output_direction, tile.is_splitter])
+                self.clauses.append([-tile.output_direction[2], *tile.input_direction, tile.is_splitter])
         if min_y_blocked:
             for x in range(self.width):
                 tile = self.get_tile_instance(x, 0)
                 self.clauses += set_all_false(tile.underground[1::2])
-                self.clauses.append([-tile.input_direction[1], *tile.output_direction, *tile.is_splitter])
-                self.clauses.append([-tile.output_direction[3], *tile.input_direction, *tile.is_splitter])
+                self.clauses.append([-tile.input_direction[1], *tile.output_direction, tile.is_splitter])
+                self.clauses.append([-tile.output_direction[3], *tile.input_direction, tile.is_splitter])
         if max_y_blocked:
             for x in range(self.width):
                 tile = self.get_tile_instance(x, self.height - 1)
                 self.clauses += set_all_false(tile.underground[1::2])
-                self.clauses.append([-tile.input_direction[3], *tile.output_direction, *tile.is_splitter])
-                self.clauses.append([-tile.output_direction[1], *tile.input_direction, *tile.is_splitter])
+                self.clauses.append([-tile.input_direction[3], *tile.output_direction, tile.is_splitter])
+                self.clauses.append([-tile.output_direction[1], *tile.input_direction, tile.is_splitter])
 
 
     def block_belts_through_edges(self, edges: Union[bool, Tuple[bool, bool], Tuple[bool, bool, bool, bool]]=True):
@@ -270,11 +251,11 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
 
                     # Underground entrance/exit cannot be above underground segment with same direction
                     self.clauses += implies(
-                        [tile_a.input_direction[direction], *invert_components(tile_a.output_direction + tile_a.is_splitter)],
+                        [tile_a.input_direction[direction], -tile_a.is_splitter, *invert_components(tile_a.output_direction)],
                         [[-tile_a.underground[direction]], [-tile_a.underground[reverse_dir]]]
                     )
                     self.clauses += implies(
-                        [tile_a.output_direction[direction], *invert_components(tile_a.input_direction + tile_a.is_splitter)],
+                        [tile_a.output_direction[direction], -tile_a.is_splitter, *invert_components(tile_a.input_direction)],
                         [[-tile_a.underground[direction]], [-tile_a.underground[reverse_dir]]]
                     )
 
@@ -282,7 +263,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     clause = [
                         -tile_a.input_direction[direction],
                         *tile_a.output_direction,
-                        *tile_a.is_splitter,
+                        tile_a.is_splitter,
                     ]
 
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
@@ -293,7 +274,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     clause = [
                         -tile_a.output_direction[direction],
                         *tile_a.input_direction,
-                        *tile_a.is_splitter,
+                        tile_a.is_splitter,
                     ]
                     tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
                     if tile_b is not None:
@@ -308,8 +289,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                             [
                                 [tile_b.output_direction[direction]], 
                                 *([-tile_b.input_direction[i]] for i in range(4)),
-                                [-tile_b.is_splitter[0]], 
-                                [-tile_b.is_splitter[1]],
+                                [-tile_b.is_splitter], 
                             ]
                         )
                     
@@ -320,8 +300,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                             [
                                 [tile_b.input_direction[direction]], 
                                 *([-tile_b.output_direction[i]] for i in range(4)),
-                                [-tile_b.is_splitter[0]], 
-                                [-tile_b.is_splitter[1]],
+                                [-tile_b.is_splitter], 
                             ]
                         )
     
@@ -361,17 +340,16 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
 
                     # Handles special splitter output case
-                    for splitter in tile_a.is_splitter:
-                        self.clauses += implies([tile_a.input_direction[direction], splitter, *invert_components(tile_b.is_splitter)], [   
-                            [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[(direction + 1) % 4]],
-                            [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[(direction - 1) % 4]],
+                    self.clauses += implies([tile_a.input_direction[direction], tile_a.is_splitter, -tile_b.is_splitter], [   
+                        [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[(direction + 1) % 4]],
+                        [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[(direction - 1) % 4]],
 
-                            [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[direction]],
-                            [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[direction]],
+                        [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[direction]],
+                        [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[direction]],
 
-                            [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction + 1) % 4]],
-                            [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction - 1) % 4]],
-                        ])
+                        [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction + 1) % 4]],
+                        [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction - 1) % 4]],
+                    ])
 
     def itersolve(self, important_variables=set(), solver='g3', ignore_colour=False):
         important_variables = set(important_variables)
@@ -379,7 +357,7 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
             for y in range(self.height):
                 tile = self.get_tile_instance(x, y)
 
-                important_variables |= set(tile.all_direction + tile.is_splitter)
+                important_variables |= set([*tile.all_direction, tile.is_splitter])
 
                 if not ignore_colour:
                     important_variables |= set(tile.colour + tile.colour_ux + tile.colour_uy)

@@ -101,7 +101,7 @@ class Grid(BaseGrid[NamedTuple, Dict[str, Any]]):
         elif isinstance(tile, Splitter):
             self.clauses += [
                 [tile_instance.is_splitter], 
-                [set_literal(tile_instance.splitter_side, tile.side)], 
+                [set_literal(tile_instance.splitter_side, not tile.is_head)], 
                 [tile_instance.splitter_direction[tile.direction]],
             ]
         elif isinstance(tile, Belt):

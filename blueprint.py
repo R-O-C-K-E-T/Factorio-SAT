@@ -68,7 +68,7 @@ def make_blueprint(tiles, label: Optional[str]=None, level: TransportBeltLevel=T
                 
                 entity['type'] = 'input' if tile.is_input else 'output'
             elif isinstance(tile, Splitter):
-                if tile.side == 1:
+                if not tile.is_head:
                     continue
                 entity['name'] = level.splitter_variant
                 
@@ -160,8 +160,8 @@ def import_blueprint(data: Any):
         if any(name == level.splitter_variant for level in TransportBeltLevel):
             dx, dy = direction_to_vec((direction + 1) % 4)
             x, y = pos
-            entities[math.floor(x - dx/2), math.floor(y - dy/2)] = Splitter(direction, 0)
-            entities[math.floor(x + dx/2), math.floor(y + dy/2)] = Splitter(direction, 1)
+            entities[math.floor(x - dx/2), math.floor(y - dy/2)] = Splitter(direction, True)
+            entities[math.floor(x + dx/2), math.floor(y + dy/2)] = Splitter(direction, False)
         elif any(name == level.belt_variant for level in TransportBeltLevel):
             entities[floor_pos] = TempBelt(direction)
         elif any(name == level.underground_variant for level in TransportBeltLevel):
@@ -230,12 +230,12 @@ def read_tile(item):
         else:
             assert False
     else:
-        if item['is_splitter'] is not None:
+        if item['is_splitter']:
             direction = input_direction
             if direction is None:
                 direction = output_direction
                 assert direction is not None
-            tile = Splitter(direction, item['is_splitter'])
+            tile = Splitter(direction, item['is_splitter_head'])
         elif input_direction is None and output_direction is None:
             tile = None
         elif input_direction is None or output_direction is None:
@@ -267,7 +267,7 @@ def write_tile_flow(tile):
         item['is_inserter'] = tile.type
         item['alt_direction'] = tile.direction
     elif isinstance(tile, Splitter):
-        item['is_splitter'] = tile.side
+        item['is_splitter'] = int(not tile.is_head)
         item['alt_direction'] = tile.direction
     elif isinstance(tile, UndergroundBelt):
         if tile.is_input:
@@ -292,7 +292,7 @@ def write_tile_flow(tile):
     return item
 
 def write_tile_simple(tile):
-    item = {'is_splitter' : None}
+    item = {'is_splitter' : False, 'is_splitter_head': False}
     if tile is None:
         item['input_direction'] = None
         item['output_direction'] = None
@@ -301,7 +301,8 @@ def write_tile_simple(tile):
             raise RuntimeError('Unsupported entity {} for format "simple"'.format(tile))
         
         if isinstance(tile, Splitter):
-            item['is_splitter'] = tile.side
+            item['is_splitter'] = True
+            item['is_splitter_head'] = tile.is_head
         item['input_direction'] = tile.input_direction
         item['output_direction'] = tile.output_direction
     return item

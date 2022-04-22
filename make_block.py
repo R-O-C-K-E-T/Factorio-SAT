@@ -107,7 +107,7 @@ if __name__ == '__main__':
         if args.underground_length == 0: # Ban underground
             grid.clauses += set_all_false(tile.underground)
 
-        grid.clauses += set_all_false(tile.is_splitter) # Ban splitters
+        grid.clauses.append([-tile.is_splitter]) # Ban splitters
     
     if args.output is not None:
         with args.output:

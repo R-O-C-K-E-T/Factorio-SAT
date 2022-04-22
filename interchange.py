@@ -82,7 +82,7 @@ if __name__ == '__main__':
 
     # No splitters
     for tile in grid.iterate_tiles():
-        grid.clauses += set_all_false(tile.is_splitter)
+        grid.clauses.append([-tile.is_splitter])
 
 
     for y in range(0, grid.height):

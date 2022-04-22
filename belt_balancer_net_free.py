@@ -42,8 +42,7 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
     grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
 
     for tile in grid.iterate_tiles():
-        for is_splitter in tile.is_splitter:
-            grid.clauses += implies([is_splitter], [tile.input_direction, tile.output_direction])
+        grid.clauses += implies([tile.is_splitter], [tile.input_direction, tile.output_direction])
 
         for flow_component in tile.flow:
             grid.clauses += set_maximum(full_flow, flow_component)
@@ -58,7 +57,7 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
                 dx1, dy1 = direction_to_vec((direction + 1) % 4)
 
                 precondition = [
-                    tile00.is_splitter[0],    
+                    tile00.is_splitter_head,    
                     tile00.input_direction[direction],   
                 ]
                 
@@ -86,13 +85,13 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
     
     for y in range(grid.height):
         tile = grid.get_tile_instance(0, y)
-        grid.clauses += set_all_false(tile.is_splitter)
+        grid.clauses.append([-tile.is_splitter])
         for i, flow_component in enumerate(tile.flow):
             grid.clauses += set_number(full_flow if y % size == i else 0, flow_component)
 
     for y in range(grid.height):
         tile = grid.get_tile_instance(grid.width - 1, y)
-        grid.clauses += set_all_false(tile.is_splitter)
+        grid.clauses.append([-tile.is_splitter])
         for flow_component in tile.flow:
             grid.clauses += set_number(denominator, flow_component)
 
@@ -171,35 +170,35 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
 
 
                 grid.clauses.append([
-                    -tile00.is_splitter[0],
+                    -tile00.is_splitter_head,
                     -tile00.input_direction[direction],
                     tile00.output_direction[direction],
                     tile01.output_direction[direction],
                 ])
 
                 grid.clauses.append([
-                    -tile00.is_splitter[0],
+                    -tile00.is_splitter_head,
                     -tile00.input_direction[direction],
                     tile00.output_direction[direction],
                     tile01.input_direction[direction],
                 ])
 
                 grid.clauses.append([
-                    -tile00.is_splitter[0],
+                    -tile00.is_splitter_head,
                     -tile00.output_direction[direction],
                     tile00.input_direction[direction],
                     tile01.input_direction[direction],
                 ])
 
                 grid.clauses.append([
-                    -tile00.is_splitter[0],
+                    -tile00.is_splitter_head,
                     -tile00.output_direction[direction],
                     tile00.input_direction[direction],
                     tile01.output_direction[direction],
                 ])
 
                 fully_connected_precondition = [
-                    tile00.is_splitter[0],
+                    tile00.is_splitter_head,
                     tile00.input_direction[direction], 
                     tile01.input_direction[direction],
                     tile00.output_direction[direction],
@@ -229,7 +228,7 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
 
                 for connected_in_tile, connected_out_tile, unconnected_in_tile in ([tile00, tile10, tile01], [tile01, tile11, tile00]):
                     partial_input_precondition = [
-                        tile00.is_splitter[0],
+                        tile00.is_splitter_head,
                         tile00.output_direction[direction],
                         connected_in_tile.input_direction[direction], 
                         -unconnected_in_tile.input_direction[direction]
@@ -250,7 +249,7 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
                         grid.clauses += implies(partial_input_precondition, add_numbers(in_flow0, in_flow1, out_flow, make_fixed_allocator(flow_carry)))
 
                     partial_output_precondition = [
-                        tile00.is_splitter[0],
+                        tile00.is_splitter_head,
                         tile00.input_direction[direction],
                         connected_in_tile.output_direction[direction], 
                         -unconnected_in_tile.output_direction[direction]
@@ -276,7 +275,7 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
     
     for y in range(grid.height):
         tile = grid.get_tile_instance(0, y)
-        grid.clauses += set_all_false(tile.is_splitter)
+        grid.clauses.append([-tile.is_splitter])
         for i, flow_component in enumerate(tile.forward.flow):
             grid.clauses += set_number(forward_input_flow if y % input_count == i else 0, flow_component)
         for flow_component in tile.backward.flow:
@@ -284,7 +283,7 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
 
     for y in range(grid.height):
         tile = grid.get_tile_instance(grid.width - 1, y)
-        grid.clauses += set_all_false(tile.is_splitter)
+        grid.clauses.append([-tile.is_splitter])
         for flow_component in tile.forward.flow:
             grid.clauses += set_number(forward_output_flow, flow_component)
         

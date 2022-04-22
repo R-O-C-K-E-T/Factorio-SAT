@@ -22,14 +22,13 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
     grid.prevent_bad_colouring(EdgeMode.NO_WRAP)
 
     for tile in grid.iterate_tiles():
-        for is_splitter in tile.is_splitter:
-            grid.clauses += implies([is_splitter], [tile.input_direction, tile.output_direction])
-        grid.clauses += implies([tile.is_splitter[0]], quadratic_one(tile.level))
-        grid.clauses += implies([tile.is_splitter[1]], quadratic_one(tile.level))
-        grid.clauses += implies(invert_components(tile.is_splitter), set_all_false(tile.level))
+        grid.clauses += implies([tile.is_splitter], [tile.input_direction, tile.output_direction])
+        grid.clauses += implies([tile.is_splitter_head], quadratic_one(tile.level))
+        grid.clauses += implies([tile.is_splitter, -tile.is_splitter_head], quadratic_one(tile.level))
+        grid.clauses += implies([-tile.is_splitter], set_all_false(tile.level))
 
-        grid.clauses += implies([tile.is_splitter[0]], set_numbers_equal(tile.level, tile.level_primary))
-        grid.clauses += implies([-tile.is_splitter[0]], set_all_false(tile.level_primary))
+        grid.clauses += implies([tile.is_splitter_head], set_numbers_equal(tile.level, tile.level_primary))
+        grid.clauses += implies([-tile.is_splitter_head], set_all_false(tile.level_primary))
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -43,7 +42,7 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
                 dx1, dy1 = direction_to_vec((direction + 1) % 4)
 
                 precondition = [
-                    tile00.is_splitter[0],    
+                    tile00.is_splitter_head,    
                     tile00.input_direction[direction],   
                 ]
                 
@@ -126,17 +125,16 @@ if __name__ == '__main__':
 
     # for tile in shadow_grid.iterate_tiles():
     #     shadow_grid.clauses += [
-    #         [-tile.is_splitter[0]],
-    #         [-tile.is_splitter[1]],
+    #         [-tile.is_splitter],
     #     ]
 
     # for tile, shadow_tile in zip(grid.iterate_tiles(), shadow_grid.iterate_tiles()):
     #     for direction in range(4):
-    #         shadow_grid.clauses += implies([tile.is_splitter[0], tile.input_direction[direction]], [
+    #         shadow_grid.clauses += implies([tile.is_splitter_head, tile.input_direction[direction]], [
     #             [shadow_tile.input_direction[direction]],
     #             [shadow_tile.output_direction[direction]],
     #         ])
-    #         shadow_grid.clauses += implies([tile.is_splitter[1], tile.input_direction[direction]], [
+    #         shadow_grid.clauses += implies([tile.is_splitter, -tile.is_splitter_head, tile.input_direction[direction]], [
     #             [shadow_tile.input_direction[direction]],
     #             [shadow_tile.output_direction[direction]],
     #         ])

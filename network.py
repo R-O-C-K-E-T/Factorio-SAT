@@ -559,7 +559,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
 
     for x, row in enumerate(tiles):
         for y, tile in enumerate(row):
-            if isinstance(tile, Splitter) and tile.side == 0:
+            if isinstance(tile, Splitter) and tile.is_head:
                 splitters.add((x,y))
 
             if colour_mapping[x, y] is not None:
@@ -580,7 +580,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
     network = []
     for x, y in splitters:
         tile = tiles[x, y]
-        assert isinstance(tile, Splitter) and tile.side == 0
+        assert isinstance(tile, Splitter) and tile.is_head
         dx0, dy0 = direction_to_vec(tile.direction)
         dx1, dy1 = direction_to_vec((tile.direction + 1) % 4)
 

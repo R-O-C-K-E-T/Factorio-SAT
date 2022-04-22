@@ -41,7 +41,7 @@ def setup_balancer_end(grid: Grid, tiles: Sequence[TileTemplate], colour: int, d
 
     if len(offsets) == 0:
         for tile in tiles:
-            grid.clauses += [[tile.input_direction[direction]], [tile.output_direction[direction]], [-tile.is_splitter[0]], [-tile.is_splitter[1]]]
+            grid.clauses += [[tile.input_direction[direction]], [tile.output_direction[direction]], [-tile.is_splitter]]
             grid.clauses += set_number(colour, tile.colour)
     else:
         grid.clauses += quadratic_one(offsets)
@@ -49,7 +49,7 @@ def setup_balancer_end(grid: Grid, tiles: Sequence[TileTemplate], colour: int, d
             consequences = []
             for i, tile in enumerate(tiles):
                 if i in range(di, di + count):
-                    consequences += [[tile.input_direction[direction]], [tile.output_direction[direction]], [-tile.is_splitter[0]], [-tile.is_splitter[1]]]
+                    consequences += [[tile.input_direction[direction]], [tile.output_direction[direction]], [-tile.is_splitter]]
                     consequences += set_number(colour, tile.colour)
                 elif rest_empty:
                     consequences += set_all_false(tile.all_direction)
@@ -129,9 +129,9 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
     for x in range(grid.width):
         for y in range(grid.height):
             tile = grid.get_tile_instance(x, y)
-            #grid.clauses += heule_one([-tile.is_splitter[0], *tile.node], grid.allocate_variable)
-            grid.clauses += quadratic_one([-tile.is_splitter[0], *tile.node])
-            #grid.clauses += library_equals([-tile.is_splitter[0], *tile.node], 1, grid.pool)
+            #grid.clauses += heule_one([-tile.is_splitter_head, *tile.node], grid.allocate_variable)
+            grid.clauses += quadratic_one([-tile.is_splitter_head, *tile.node])
+            #grid.clauses += library_equals([-tile.is_splitter_head, *tile.node], 1, grid.pool)
 
     for i, (input_colours, output_colours) in enumerate(network):
         assert sum(colour is None for colour in input_colours + output_colours) <= 1
@@ -140,7 +140,7 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
             for y in range(grid.height):
                 tile00 = grid.get_tile_instance(x, y)
 
-                #grid.clauses.append([tile00.is_splitter[0], -tile00.node[i]])
+                #grid.clauses.append([tile00.is_splitter_head, -tile00.node[i]])
 
                 if any(colour is None for colour in input_colours):
                     assert not any(colour is None for colour in output_colours)
@@ -247,8 +247,8 @@ def prevent_double_edge_belts(grid: Grid):
             tile_b = grid.get_tile_instance(x, y + 1)
 
             grid.clauses.append([
-                -tile_a.input_direction[0], -tile_a.output_direction[0], *tile_a.is_splitter,
-                -tile_b.input_direction[0], -tile_b.output_direction[0], *tile_b.is_splitter,
+                -tile_a.input_direction[0], -tile_a.output_direction[0], tile_a.is_splitter,
+                -tile_b.input_direction[0], -tile_b.output_direction[0], tile_b.is_splitter,
             ])
 
 if __name__ == '__main__':

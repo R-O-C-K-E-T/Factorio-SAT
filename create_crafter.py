@@ -283,7 +283,7 @@ if __name__ == '__main__':
                 *set_number(colour, tile.colour[1]),
             ])
 
-    for solution in grid.itersolve(solver=solver=args.solver):
+    for solution in grid.itersolve(solver=args.solver):
         print(json.dumps(solution.tolist()))
         if not args.all:
             break

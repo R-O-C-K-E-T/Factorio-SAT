@@ -74,7 +74,7 @@ def draw_texture(texture, width=None, height=None):
 
 def get_animation_length(solution):
     for tile in solution.reshape(-1):
-        if tile.get('is_splitter') is not None:
+        if tile.get('is_splitter') is True:
             return SPLITTER_ANIMATION_LENGTH
     return BELT_ANIMATION_LENGTH
 
@@ -111,27 +111,27 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
         elif layer == RenderLayer.TOP:
             glPushMatrix()
             if tile.direction == 0:
-                if tile.side:
+                if not tile.is_head:
                     glTranslatef(0, -0.5, 0)
                     tilemaps.SPLITTER_EAST[1].render(animation % 8, (animation // 8) % 4)
                 else:
                     glTranslatef(0, -5/16, 0)
                     tilemaps.SPLITTER_EAST[0].render(animation % 8, (animation // 8) % 4)
             elif tile.direction == 2:
-                if tile.side:
+                if not tile.is_head:
                     glTranslatef(0, -5/16, 0)
                     tilemaps.SPLITTER_WEST[0].render(animation % 8, (animation // 8) % 4)
                 else:
                     glTranslatef(0, -5/16, 0)
                     tilemaps.SPLITTER_WEST[1].render(animation % 8, (animation // 8) % 4)
             elif tile.direction == 1:
-                if tile.side:
+                if not tile.is_head:
                     tilemaps.SPLITTER_NORTH.render(animation % 8, (animation // 8) % 4, upper=(13/32,1))
                 else:
                     tilemaps.SPLITTER_NORTH.render(animation % 8, (animation // 8) % 4, lower=(13/32,0))
             elif tile.direction == 3:
                 glTranslatef(-4/32, 0, 0)
-                if tile.side:
+                if not tile.is_head:
                     tilemaps.SPLITTER_SOUTH.render(animation % 8, (animation // 8) % 4, lower=(14/32,0))
                 else:
                     glTranslatef(-1/32, 0, 0)

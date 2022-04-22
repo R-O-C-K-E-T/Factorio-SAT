@@ -65,14 +65,15 @@ MAPPING = {
     UndergroundBelt(2, False): 'J',#'↤',
     UndergroundBelt(3,  True): 'k',#'⤓',
     UndergroundBelt(3, False): 'K',#'↧',
-    Splitter(0, False): 'd', #'⥟',
-    Splitter(0,  True): 'D', #'⥛',
-    Splitter(1, False): 'w', #'⥜',
-    Splitter(1,  True): 'W', #'⥠',
-    Splitter(2, False): 'a', #'⥚',
-    Splitter(2,  True): 'A', #'⥞',
-    Splitter(3, False): 's', #'⥡',
-    Splitter(3,  True): 'S', #'⥝',
+    
+    Splitter(0,  True): 'd', #'⥟',
+    Splitter(0, False): 'D', #'⥛',
+    Splitter(1,  True): 'w', #'⥜',
+    Splitter(1, False): 'W', #'⥠',
+    Splitter(2,  True): 'a', #'⥚',
+    Splitter(2, False): 'A', #'⥞',
+    Splitter(3,  True): 's', #'⥡',
+    Splitter(3, False): 'S', #'⥝',
 }
 
 INV_MAPPING = dict((val, key) for key, val in MAPPING.items())

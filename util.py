@@ -14,7 +14,7 @@ class BaseTile:
         self.output_direction = output_direction
 
 class Belt(BaseTile):
-    def __init__(self, input_direction, output_direction):
+    def __init__(self, input_direction: int, output_direction: int):
         assert (input_direction - output_direction) % 4 != 2
         super().__init__(input_direction, output_direction)
 
@@ -34,7 +34,7 @@ class Belt(BaseTile):
     __repr__ = __str__
 
 class UndergroundBelt(BaseTile):
-    def __init__(self, direction, is_input):
+    def __init__(self, direction: int, is_input: bool):
         self.direction = direction
         self.is_input = is_input
 
@@ -59,9 +59,9 @@ class UndergroundBelt(BaseTile):
     __repr__ = __str__
 
 class Splitter(BaseTile):
-    def __init__(self, direction, side):
+    def __init__(self, direction: int, is_head: bool):
         self.direction = direction
-        self.side = side # 0 = left, 1 = right
+        self.is_head = is_head
 
         super().__init__(direction, direction)
 
@@ -71,17 +71,17 @@ class Splitter(BaseTile):
         if not isinstance(other, Splitter):
             return False
 
-        return self.direction == other.direction and self.side == other.side
+        return self.direction == other.direction and self.is_head == other.is_head
 
     def __hash__(self):
-        return hash((self.direction, self.side))
+        return hash((self.direction, self.is_head))
 
     def __str__(self):
-        return 'Splitter({}, {})'.format(self.direction, self.side)
+        return 'Splitter({}, {})'.format(self.direction, self.is_head)
     __repr__ = __str__
 
 class Inserter(BaseTile):
-    def __init__(self, direction, type):
+    def __init__(self, direction: int, type: int):
         self.direction = direction
         self.type = type # 0 -> Normal, 1 -> Long
 
@@ -103,7 +103,7 @@ class Inserter(BaseTile):
     __repr__ = __str__
 
 class AssemblingMachine(BaseTile):
-    def __init__(self, x, y):
+    def __init__(self, x: int, y: int):
         self.x = x
         self.y = y
         super().__init__()
