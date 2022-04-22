@@ -192,26 +192,18 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
             for y in range(self.height):
                 tile = self.get_tile_instance(0, y)
                 self.clauses += set_all_false(tile.underground[0::2])
-                self.clauses.append([-tile.input_direction[2], *tile.output_direction, tile.is_splitter])
-                self.clauses.append([-tile.output_direction[0], *tile.input_direction, tile.is_splitter])
         if max_x_blocked:
             for y in range(self.height):
                 tile = self.get_tile_instance(self.width - 1, y)
                 self.clauses += set_all_false(tile.underground[0::2])
-                self.clauses.append([-tile.input_direction[0], *tile.output_direction, tile.is_splitter])
-                self.clauses.append([-tile.output_direction[2], *tile.input_direction, tile.is_splitter])
         if min_y_blocked:
             for x in range(self.width):
                 tile = self.get_tile_instance(x, 0)
                 self.clauses += set_all_false(tile.underground[1::2])
-                self.clauses.append([-tile.input_direction[1], *tile.output_direction, tile.is_splitter])
-                self.clauses.append([-tile.output_direction[3], *tile.input_direction, tile.is_splitter])
         if max_y_blocked:
             for x in range(self.width):
                 tile = self.get_tile_instance(x, self.height - 1)
                 self.clauses += set_all_false(tile.underground[1::2])
-                self.clauses.append([-tile.input_direction[3], *tile.output_direction, tile.is_splitter])
-                self.clauses.append([-tile.output_direction[1], *tile.input_direction, tile.is_splitter])
 
 
     def block_belts_through_edges(self, edges: Union[bool, Tuple[bool, bool], Tuple[bool, bool, bool, bool]]=True):
@@ -227,18 +219,26 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
             for y in range(self.height):
                 tile = self.get_tile_instance(0, y)
                 self.clauses += set_all_false([tile.input_direction[0], tile.output_direction[2]])
+                self.clauses.append([-tile.input_direction[2], *tile.output_direction])
+                self.clauses.append([-tile.output_direction[0], *tile.input_direction])
         if max_x_blocked:
             for y in range(self.height):
                 tile = self.get_tile_instance(self.width - 1, y)
                 self.clauses += set_all_false([tile.input_direction[2], tile.output_direction[0]])
+                self.clauses.append([-tile.input_direction[0], *tile.output_direction])
+                self.clauses.append([-tile.output_direction[2], *tile.input_direction])
         if min_y_blocked:
             for x in range(self.width):
                 tile = self.get_tile_instance(x, 0)
                 self.clauses += set_all_false([tile.input_direction[3], tile.output_direction[1]])
+                self.clauses.append([-tile.input_direction[1], *tile.output_direction])
+                self.clauses.append([-tile.output_direction[3], *tile.input_direction])
         if max_y_blocked:
             for x in range(self.width):
                 tile = self.get_tile_instance(x, self.height - 1)
                 self.clauses += set_all_false([tile.input_direction[1], tile.output_direction[3]])
+                self.clauses.append([-tile.input_direction[3], *tile.output_direction])
+                self.clauses.append([-tile.output_direction[1], *tile.input_direction])
         
     def prevent_bad_undergrounding(self, edge_mode: EdgeModeType):
         for direction in range(4):
@@ -326,30 +326,25 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                         self.clauses.append(clause)
 
     def prevent_intersection(self, edge_mode: EdgeModeType):
-        for x in range(self.width):
-            for y in range(self.height):
-                tile_a = self.get_tile_instance(x, y)
-                for direction in range(4):
-                    dx, dy = direction_to_vec(direction)
-
-                    tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
-                    if tile_b is None:
-                        continue
+        for direction in range(4):
+            for tile_a, tile_b in self.iterate_tile_lines(direction_to_vec(direction), 2, edge_mode):
+                if tile_b is None:
+                    continue
 
 
-                    self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
+                self.clauses += literals_same(tile_a.output_direction[direction], tile_b.input_direction[direction])
 
-                    # Handles special splitter output case
-                    self.clauses += implies([tile_a.input_direction[direction], tile_a.is_splitter, -tile_b.is_splitter], [   
-                        [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[(direction + 1) % 4]],
-                        [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[(direction - 1) % 4]],
+                # Handles special splitter output case
+                self.clauses += implies([tile_a.input_direction[direction], tile_a.is_splitter, -tile_b.is_splitter], [   
+                    [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[(direction + 1) % 4]],
+                    [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[(direction - 1) % 4]],
 
-                        [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[direction]],
-                        [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[direction]],
+                    [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[direction]],
+                    [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[direction]],
 
-                        [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction + 1) % 4]],
-                        [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction - 1) % 4]],
-                    ])
+                    [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction + 1) % 4]],
+                    [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction - 1) % 4]],
+                ])
 
     def itersolve(self, important_variables=set(), solver='g3', ignore_colour=False):
         important_variables = set(important_variables)
