@@ -53,19 +53,24 @@ def setup_balancer_end(grid: Grid, tiles: Sequence[TileTemplate], colour: int, d
                     consequences += set_number(colour, tile.colour)
                 elif rest_empty:
                     consequences += set_all_false(tile.all_direction)
+                else:
+                    consequences += [
+                        [-tile.output_direction[direction]], 
+                        [-tile.input_direction[direction], *tile.output_direction]
+                    ]
             grid.clauses += implies([literal], consequences)
     
     return offsets
     
 
-def setup_balancer_ends(grid: Grid, network, aligned: bool):
+def setup_balancer_ends(grid: Grid, network, aligned: bool, use_ends: bool):
     (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network.elements())
 
     start_tiles = [grid.get_tile_instance(0, y) for y in range(grid.height)]
     end_tiles = [grid.get_tile_instance(grid.width - 1, y) for y in range(grid.height)]
 
-    start_offsets = setup_balancer_end(grid, start_tiles, input_colour, 0, input_count)
-    end_offsets = setup_balancer_end(grid, end_tiles, output_colour, 0, output_count)
+    start_offsets = setup_balancer_end(grid, start_tiles, input_colour, 0, input_count, not use_ends)
+    end_offsets = setup_balancer_end(grid, end_tiles, output_colour, 0, output_count, not use_ends)
 
     if aligned:
         if input_count >= output_count:
@@ -75,13 +80,13 @@ def setup_balancer_ends(grid: Grid, network, aligned: bool):
             for i, end_offset in enumerate(end_offsets):
                 grid.clauses += implies([end_offset], [start_offsets[i:(i + 1 + output_count - input_count)]])
 
-def setup_balancer_ends_90(grid: Grid, network):
+def setup_balancer_ends_90(grid: Grid, network, use_ends: bool):
     (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network.elements())
 
     start_tiles = [grid.get_tile_instance(0, y) for y in range(grid.height)]
     end_tiles = [grid.get_tile_instance(x, grid.height - 1) for x in range(grid.width)]
-    setup_balancer_end(grid, start_tiles, input_colour, 0, input_count)
-    setup_balancer_end(grid, end_tiles, output_colour, 3, output_count)
+    setup_balancer_end(grid, start_tiles, input_colour, 0, input_count, not use_ends)
+    setup_balancer_end(grid, end_tiles, output_colour, 3, output_count, not use_ends)
 
 def setup_balancer_ends_180(grid: Grid, network):
     (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network.elements())
@@ -89,16 +94,7 @@ def setup_balancer_ends_180(grid: Grid, network):
     tiles = [grid.get_tile_instance(0, y) for y in range(grid.height)]
     setup_balancer_end(grid, tiles, input_colour, 0, input_count, rest_empty=False)
     setup_balancer_end(grid, tiles, output_colour, 2, output_count, rest_empty=False)
-
-    for tile in tiles:
-        grid.clauses += implies([tile.output_direction[0]], set_number(input_colour, tile.colour))
-        grid.clauses += implies([tile.output_direction[2]], set_number(output_colour, tile.colour))
-        grid.clauses += set_all_false(tile.input_direction[1::2] + tile.output_direction[1::2])
-        grid.clauses.append( [tile.input_direction[0], -tile.output_direction[0]])
-        grid.clauses.append([-tile.input_direction[0],  tile.output_direction[0]])
-        grid.clauses.append([ tile.input_direction[2], -tile.output_direction[2]])
-        grid.clauses.append([-tile.input_direction[2],  tile.output_direction[2]])
-        
+ 
 
 def create_balancer(network, width: int, height: int, underground_length: int) -> Grid:
     assert width > 0 and height > 0
@@ -263,8 +259,9 @@ if __name__ == '__main__':
     parser.add_argument('--glue-splitters', action='store_true', help='Prevents a configuration where a splitter has two straight input belts. Effectively pushing all splitters as far back as possible')
     parser.add_argument('--expand-underground', action='store_true', help='Ensures that underground belts are expanded if possible')
     parser.add_argument('--prevent-mergeable-underground', action='store_true', help='Prevent underground segments that can be merged')
-    parser.add_argument('--prevent-bad-patterns', action='store_true', help='Prevents patterns of belts that are not helpful, i.e. always substitutable for a simpler configuration.')
-    parser.add_argument('--break-symmetry', action='store_true', help='Prevents vertical reflections being considered')
+    parser.add_argument('--prevent-bad-patterns', action='store_true', help='Prevents patterns of belts that are not helpful, i.e. always substitutable for simpler configuration.')
+    parser.add_argument('--break-symmetry', action='store_true', help='Prevents vertical reflections being considered, sometimes unsound when applied with --prevent-bad-patterns')
+    parser.add_argument('--use-ends', action='store_true', help='Allow ends to have non-empty tiles, asside from input/output belts')
     parser.add_argument('--fast', action='store_true', help='Enables all speed improving options')
     parser.add_argument('--aligned', action='store_true', help='Enforces balancer input aligns with output')
     parser.add_argument('--underground-length', type=int, default=4, help='Sets the maximum length of underground section (excludes ends)')
@@ -280,6 +277,9 @@ if __name__ == '__main__':
 
     if sum([args.aligned, args.turn_90, args.turn_180]) >= 2:
         raise RuntimeError('--aligned, --90 and --180 are mutually exclusive')
+
+    if args.break_symmetry and args.turn_90:
+        raise RuntimeError('--break-symmetry and --90 are mutually exclusive')
 
     network = open_network(args.network)
     args.network.close()
@@ -302,6 +302,7 @@ if __name__ == '__main__':
         prevent_double_edge_belts(grid)
     if args.glue_splitters or args.fast:
         optimisations.glue_splitters(grid)
+        optimisations.glue_partial_splitters(grid, EdgeMode.NO_WRAP)
     if args.expand_underground or args.fast:
         optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
     if args.prevent_mergeable_underground or args.fast:
@@ -312,16 +313,19 @@ if __name__ == '__main__':
         optimisations.prevent_belt_hooks(grid, EdgeMode.NO_WRAP)
         optimisations.prevent_semicircles(grid, EdgeMode.NO_WRAP)
         optimisations.prevent_small_loops(grid)
+        optimisations.prevent_underground_hook(grid, EdgeMode.NO_WRAP)
+        optimisations.prevent_zigzags(grid, EdgeMode.NO_WRAP)
+        optimisations.prevent_belt_parallel_splitter(grid, EdgeMode.NO_WRAP)
 
     grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
     optimisations.prevent_empty_along_underground(grid, EdgeMode.NO_WRAP)
 
     if args.turn_90:
-        setup_balancer_ends_90(grid, network)
+        setup_balancer_ends_90(grid, network, args.use_ends)
     elif args.turn_180:
         setup_balancer_ends_180(grid, network)
     else:
-        setup_balancer_ends(grid, network, args.aligned)
+        setup_balancer_ends(grid, network, args.aligned, args.use_ends)
 
     for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
         print(json.dumps(solution.tolist()))
