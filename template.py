@@ -89,7 +89,7 @@ def flatten(tile: Union[NamedTuple, NestedArray[LiteralType]]) -> List[LiteralTy
     if isinstance(tile, LiteralType):
         return [tile]
     
-    if isinstance(tile, NamedTuple):
+    if hasattr(tile, '_asdict'):
         tile = tile._asdict().values()
     
     result = []
@@ -189,6 +189,13 @@ class NumberTemplate(SizedTemplate[int]):
 
 CompositeTemplateParams = Dict[str, Union[Template[Any, Any], Callable, 'CompositeTemplateParams']]
 
+def call_ignoring_unused(func: Callable[..., T], args: Dict[str, Any]) -> T:
+    if func.__code__.co_flags & inspect.CO_VARKEYWORDS:
+        return func(**args)
+    else:
+        inputs = set(func.__code__.co_varnames)
+        return func(**{name: val for name, val in args.items() if name in inputs})
+
 class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
     def __init__(self, template: CompositeTemplateParams):
         self._atomics: Dict[str, Template] = {}
@@ -220,12 +227,7 @@ class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
             members[name] = item_type.instantiate(pool)
 
         for name, function in self._aliases.items():
-            if function.__code__.co_flags & inspect.CO_VARKEYWORDS:
-                result = function(**members)
-            else:
-                inputs = set(function.__code__.co_varnames)
-                result = function(**{name: val for name, val in members.items() if name in inputs})
-
+            result = call_ignoring_unused(function, members)
             if isinstance(result, np.ndarray):
                 result = result.tolist()
             members[name] = result

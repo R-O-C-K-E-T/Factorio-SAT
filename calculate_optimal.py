@@ -39,7 +39,7 @@ def solve_balancer(network, size, solver):
     grid = belt_balancer.create_balancer(network, width, height, maximum_underground_length)
     grid.block_belts_through_edges((False, True))
     grid.prevent_intersection(EdgeMode.NO_WRAP)
-    belt_balancer.setup_balancer_ends(grid, network, True)
+    belt_balancer.setup_balancer_ends(grid, network, True, False)
 
     optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
     optimisations.apply_generic_optimisations(grid)
@@ -196,7 +196,7 @@ if __name__ == '__main__':
             get_next_size = store.next_area_size
         
         
-        for store in sorted(stores, key=lambda store: [int(s) for s in store.network_name.split('x')]):
+        for store in sorted(stores, key=lambda store: store.network_name):
             if get_next_size(args.underground_length) is not None:
                 continue
 
