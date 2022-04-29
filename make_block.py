@@ -1,8 +1,12 @@
-import argparse, sys, json
+import argparse
+import json
+import sys
+
+import optimisations
+import solver
+from template import EdgeMode, EdgeModeType
 from util import *
 
-from template import EdgeModeType, EdgeMode
-import solver, optimisations
 
 def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
     for y in range(grid.height):
@@ -34,10 +38,13 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
                 else:
                     grid.clauses += implies([tile_a.output_direction[direction]], increment_number(tile_a.colour, tile_b.colour))
 
-                grid.clauses += implies([tile_a.input_direction[direction], *invert_components(tile_a.output_direction)], increment_number(tile_a.colour, colour_b))
+                grid.clauses += implies([tile_a.input_direction[direction], *invert_components(tile_a.output_direction)],
+                                        increment_number(tile_a.colour, colour_b))
 
-                grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]], set_numbers_equal(colour_a, tile_b.colour))
-                grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], set_numbers_equal(colour_a, colour_b))  
+                grid.clauses += implies([*invert_components(tile_b.input_direction), tile_b.output_direction[direction]],
+                                        set_numbers_equal(colour_a, tile_b.colour))
+                grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], set_numbers_equal(colour_a, colour_b))
+
 
 def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
     for x in range(grid.width):
@@ -53,6 +60,7 @@ def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
                 grid.clauses.append([-tile_a.underground[direction + 0], -tile_b.underground[direction + 2]])
                 grid.clauses.append([-tile_a.underground[direction + 2], -tile_b.underground[direction + 2]])
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a stream of blocks of random belts')
     parser.add_argument('width', type=int, help='Block width')
@@ -67,7 +75,6 @@ if __name__ == '__main__':
     parser.add_argument('--single-loop', action='store_true', help='Prevent multiple loops')
     parser.add_argument('--output', type=argparse.FileType('w'), nargs='?', help='Output file, if no file provided then results are sent to standard out')
     args = parser.parse_args()
-
 
     if args.allow_empty and args.single_loop:
         raise RuntimeError('Incompatible options: allow-empty + single-loop')
@@ -88,7 +95,7 @@ if __name__ == '__main__':
         grid.block_underground_through_edges()
 
     optimisations.prevent_small_loops(grid)
-    
+
     if grid.underground_length > 0:
         grid.enforce_maximum_underground_length(edge_mode)
         optimisations.prevent_empty_along_underground(grid, edge_mode)
@@ -96,19 +103,18 @@ if __name__ == '__main__':
     if args.no_parallel:
         prevent_parallel(grid, edge_mode)
 
-
     if args.single_loop:
         ensure_loop_length(grid, edge_mode)
 
     for tile in grid.iterate_tiles():
         if not args.allow_empty:
-            grid.clauses.append(tile.all_direction) # Ban Empty
+            grid.clauses.append(tile.all_direction)  # Ban Empty
 
-        if args.underground_length == 0: # Ban underground
+        if args.underground_length == 0:  # Ban underground
             grid.clauses += set_all_false(tile.underground)
 
-        grid.clauses.append([-tile.is_splitter]) # Ban splitters
-    
+        grid.clauses.append([-tile.is_splitter])  # Ban splitters
+
     if args.output is not None:
         with args.output:
             for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
@@ -121,7 +127,7 @@ if __name__ == '__main__':
             print(json.dumps(solution.tolist()))
 
             if i == 0:
-                sys.stdout.flush() # Push the first one out as fast a possible
+                sys.stdout.flush()  # Push the first one out as fast a possible
 
             if not args.all:
                 break

@@ -1,33 +1,37 @@
-from dataclasses import dataclass
-from collections import namedtuple
 import re
-from template import EdgeMode
+from collections import namedtuple
+from dataclasses import dataclass
+from typing import Any, Dict, List
+
+import belt_balancer
+import optimisations
+import stringifier
+from network import deduplicate_network, open_network
 from solver import Grid
-from typing import *
+from template import EdgeMode
 
-from network import open_network, deduplicate_network
-import stringifier, belt_balancer, optimisations
-
-TEST_EDGE_START  = '┌'
+TEST_EDGE_START = '┌'
 TEST_EDGE_MIDDLE = '│'
-TEST_EDGE_STOP   = '└'
+TEST_EDGE_STOP = '└'
 TEST_EDGES = {TEST_EDGE_START, TEST_EDGE_MIDDLE, TEST_EDGE_STOP}
 SUITE_FILENAME = 'test_suite'
+
 
 def remap_characters(filename: str, mapping: Dict[str, str]):
     with open(filename, 'r') as f:
         lines = [line.strip() for line in f.readlines()]
-    
+
     new_lines = []
     for line in lines:
         if line[0] in TEST_EDGES:
             line = ''.join(mapping.get(character, character) for character in line)
         new_lines.append(line)
-    
+
     with open(filename + '.new', 'w') as f:
         for line in new_lines:
             f.write(line)
             f.write('\n')
+
 
 @dataclass
 class TestCase:
@@ -79,7 +83,7 @@ class TestCase:
                 raise RuntimeError(f'Unknown rule "{rule}"')
 
         grid.enforce_maximum_underground_length(edge_mode)
-        
+
         grid.prevent_intersection(edge_mode)
         if edges == 'block':
             grid.block_belts_through_edges()
@@ -88,6 +92,7 @@ class TestCase:
             for x, tile in enumerate(row):
                 grid.set_tile(x, y, tile)
         return grid.check() == self.is_positive
+
 
 @dataclass
 class TestSuite:
@@ -105,7 +110,7 @@ class TestSuite:
             sub_passed, sub_failed = suite.run(indent + 1)
             passed += sub_passed
             failed += sub_failed
-        
+
         fail_list = []
         for i, test in enumerate(self.cases):
             if test.run():
@@ -117,14 +122,16 @@ class TestSuite:
         failed_str = ''
         if len(fail_list) != 0:
             failed_str = ' (' + ','.join(map(str, fail_list)) + ')'
-        print('  ' * (indent+1) + f'{passed} passed, {failed} failed' + failed_str)
+        print('  ' * (indent + 1) + f'{passed} passed, {failed} failed' + failed_str)
         return passed, failed
+
 
 @dataclass(frozen=True)
 class Token:
     name: str
     lineno: int
     data: Any
+
 
 def tokenise(lines: List[str]) -> List[Token]:
     line_iter = enumerate(lines)
@@ -136,7 +143,7 @@ def tokenise(lines: List[str]) -> List[Token]:
         if not line.startswith(TEST_EDGE_START):
             if len(line) > 0 and line[0] in TEST_EDGES:
                 raise RuntimeError(f'Invalid line start character "{line[0]}" at line {row+1}')
-            
+
             match = block_start.match(line)
             if match is not None:
                 if match[3] == '+':
@@ -165,10 +172,11 @@ def tokenise(lines: List[str]) -> List[Token]:
             tokenised.append(Token('test', row + 1, stringifier.decode(test_case)))
     return tokenised
 
+
 def open_suite(filename: str):
     with open(filename, 'r') as f:
         lines = [line.strip() for line in f.readlines()]
-    
+
     tokens = tokenise(lines)
 
     stack = []
@@ -200,11 +208,12 @@ def open_suite(filename: str):
             if last.is_positive is None:
                 raise RuntimeError(f'Test at line {token.lineno} does is neither positive nor negative')
             last.test_cases.append(TestCase(len(last.test_cases) + 1, last.params, last.is_positive, token.data))
-    
+
     return result
 
+
 if __name__ == '__main__':
-    #remap_characters(SUITE_FILENAME, {})
+    # remap_characters(SUITE_FILENAME, {})
     suite = open_suite(SUITE_FILENAME)
     _, failed = suite.run()
     if failed != 0:

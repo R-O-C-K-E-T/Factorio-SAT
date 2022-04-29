@@ -1,12 +1,15 @@
+import argparse
+import json
+from typing import Sequence
+
 from pysat.card import EncType
-from cardinality import library_atleast, library_equals, quadratic_one, library_equals
-import argparse, json
 
 import optimisations
-from solver import Grid, Belt, TileTemplate
-from template import OneHotTemplate, EdgeMode
+from cardinality import library_atleast, library_equals, quadratic_one
+from network import deduplicate_network, get_input_output_colours, open_network
+from solver import Belt, Grid, TileTemplate
+from template import EdgeMode, OneHotTemplate
 from util import *
-from network import get_input_output_colours, open_network, deduplicate_network
 
 
 def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offset: int):
@@ -20,10 +23,9 @@ def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offse
     for y in range(start_offset, start_offset + input_count):
         grid.set_tile(0, y, Belt(0, 0))
         grid.set_colour(grid.width-1, y, input_colour)
-    
+
     for y in range(start_offset+input_count, grid.height):
         grid.set_tile(0, y, None)
-    
 
     for y in range(end_offset):
         grid.set_tile(grid.width-1, y, None)
@@ -35,7 +37,8 @@ def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offse
     for y in range(end_offset+output_count, grid.height):
         grid.set_tile(grid.width-1, y, None)
 
-def setup_balancer_end(grid: Grid, tiles: Sequence[TileTemplate], colour: int, direction: int, count: int, rest_empty: bool=True):
+
+def setup_balancer_end(grid: Grid, tiles: Sequence[TileTemplate], colour: int, direction: int, count: int, rest_empty: bool = True):
     assert count <= len(tiles)
     offsets = [grid.allocate_variable() for _ in range(len(tiles) - count)]
 
@@ -55,13 +58,13 @@ def setup_balancer_end(grid: Grid, tiles: Sequence[TileTemplate], colour: int, d
                     consequences += set_all_false(tile.all_direction)
                 else:
                     consequences += [
-                        [-tile.output_direction[direction]], 
+                        [-tile.output_direction[direction]],
                         [-tile.input_direction[direction], *tile.output_direction]
                     ]
             grid.clauses += implies([literal], consequences)
-    
+
     return offsets
-    
+
 
 def setup_balancer_ends(grid: Grid, network, aligned: bool, use_ends: bool):
     (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network.elements())
@@ -80,6 +83,7 @@ def setup_balancer_ends(grid: Grid, network, aligned: bool, use_ends: bool):
             for i, end_offset in enumerate(end_offsets):
                 grid.clauses += implies([end_offset], [start_offsets[i:(i + 1 + output_count - input_count)]])
 
+
 def setup_balancer_ends_90(grid: Grid, network, use_ends: bool):
     (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network.elements())
 
@@ -88,13 +92,14 @@ def setup_balancer_ends_90(grid: Grid, network, use_ends: bool):
     setup_balancer_end(grid, start_tiles, input_colour, 0, input_count, not use_ends)
     setup_balancer_end(grid, end_tiles, output_colour, 3, output_count, not use_ends)
 
+
 def setup_balancer_ends_180(grid: Grid, network):
     (input_colour, input_count), (output_colour, output_count) = get_input_output_colours(network.elements())
 
     tiles = [grid.get_tile_instance(0, y) for y in range(grid.height)]
     setup_balancer_end(grid, tiles, input_colour, 0, input_count, rest_empty=False)
     setup_balancer_end(grid, tiles, output_colour, 2, output_count, rest_empty=False)
- 
+
 
 def create_balancer(network, width: int, height: int, underground_length: int) -> Grid:
     assert width > 0 and height > 0
@@ -110,7 +115,7 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
         if colour in all_colours:
             continue
         grid.prevent_colour(colour)
-    
+
     grid.block_underground_through_edges()
     grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
     grid.prevent_bad_colouring(EdgeMode.NO_WRAP)
@@ -119,7 +124,6 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
     for i, count in enumerate(network.values()):
         literals = [grid.get_tile_instance(x, y).node[i] for x in range(grid.width) for y in range(grid.height)]
         grid.clauses += library_equals(literals, count, grid.pool, EncType.kmtotalizer)
-
 
     # Each splitter has one type
     for x in range(grid.width):
@@ -149,14 +153,14 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
                     dx1, dy1 = direction_to_vec((direction + 1) % 4)
 
                     precondition = [
-                        tile00.node[i],       
+                        tile00.node[i],
                     ]
                     if any(colour is None for colour in input_colours):
                         assert not any(colour is None for colour in output_colours)
                         precondition.append(tile00.output_direction[direction])
                     else:
                         precondition.append(tile00.input_direction[direction])
-                    
+
                     tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.NO_WRAP)
                     tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.NO_WRAP)
                     tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.NO_WRAP)
@@ -177,7 +181,7 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
                     else:
                         grid.clauses += implies(precondition, [[tile00.input_direction[direction]], [tile01.input_direction[direction]]])
                         grid.clauses += implies(precondition, set_numbers(*input_colours, tile00.colour, tile01.colour))
-                    
+
                     colour_a, colour_b = output_colours
                     if colour_a is None or colour_b is None:
                         colour = colour_a
@@ -193,6 +197,7 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
                         grid.clauses += implies(precondition, set_numbers(*output_colours, tile10.colour, tile11.colour))
     return grid
 
+
 def enforce_edge_splitters(grid: Grid, network):
     (network_input_colour, _), (network_output_colour, _) = get_input_output_colours(network.elements())
 
@@ -206,7 +211,8 @@ def enforce_edge_splitters(grid: Grid, network):
             if colour == network_input_colour:
                 recirculate_input += 1
 
-    input_splitters = [(i, count) for i, ((input_colours, _), count) in enumerate(network.items()) if all(colour == network_input_colour for colour in input_colours)]
+    input_splitters = [(i, count) for i, ((input_colours, _), count) in enumerate(network.items())
+                       if all(colour == network_input_colour for colour in input_colours)]
     if recirculate_input == 0:
         for i, count in input_splitters:
             literals = [grid.get_tile_instance(1, y).node[i] for y in range(grid.height)]
@@ -220,7 +226,8 @@ def enforce_edge_splitters(grid: Grid, network):
             literals = [grid.get_tile_instance(1, y).node[i] for y in range(grid.height) for i, _ in input_splitters]
             grid.clauses += library_atleast(literals, edge_splitter_min, grid.pool)
 
-    output_splitters = [(i, count) for i, ((_, output_colours), count) in enumerate(network.items()) if all(colour == network_output_colour for colour in output_colours)]
+    output_splitters = [(i, count) for i, ((_, output_colours), count) in enumerate(network.items())
+                        if all(colour == network_output_colour for colour in output_colours)]
     if recirculate_output == 0:
         for i, count in output_splitters:
             literals = [grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height)]
@@ -236,6 +243,7 @@ def enforce_edge_splitters(grid: Grid, network):
             literals = [grid.get_tile_instance(grid.width - 2, y).node[i] for y in range(grid.height) for i, _ in output_splitters]
             grid.clauses += library_atleast(literals, edge_splitter_min, grid.pool)
 
+
 def prevent_double_edge_belts(grid: Grid):
     for x in (1, max(grid.width - 2, 1)):
         for y in range(grid.height - 1):
@@ -247,6 +255,7 @@ def prevent_double_edge_belts(grid: Grid):
                 -tile_b.input_direction[0], -tile_b.output_direction[0], tile_b.is_splitter,
             ])
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
     parser.add_argument('network', type=argparse.FileType('r'), help='Splitter network')
@@ -254,13 +263,18 @@ if __name__ == '__main__':
     parser.add_argument('height', type=int, help='Belt balancer maximum height')
     parser.add_argument('--90', action='store_true', dest='turn_90', help='Make 90 degree balancer')
     parser.add_argument('--180', action='store_true', dest='turn_180', help='Make 180 degree balancer')
-    parser.add_argument('--edge-splitters', action='store_true', help='Enforce that any splitter that has both connections to the input/output of the balancer must be placed on the edge')
-    parser.add_argument('--edge-belts', action='store_true', help='Prevents two side by side belts at the inputs/outputs of a balancer (weaker version of --edge-splitters)')
-    parser.add_argument('--glue-splitters', action='store_true', help='Prevents a configuration where a splitter has two straight input belts. Effectively pushing all splitters as far back as possible')
+    parser.add_argument('--edge-splitters', action='store_true',
+                        help='Enforce that any splitter that has both connections to the input/output of the balancer must be placed on the edge')
+    parser.add_argument('--edge-belts', action='store_true',
+                        help='Prevents two side by side belts at the inputs/outputs of a balancer (weaker version of --edge-splitters)')
+    parser.add_argument('--glue-splitters', action='store_true',
+                        help='Prevents a configuration where a splitter has two straight input belts. Effectively pushing all splitters as far back as possible')
     parser.add_argument('--expand-underground', action='store_true', help='Ensures that underground belts are expanded if possible')
     parser.add_argument('--prevent-mergeable-underground', action='store_true', help='Prevent underground segments that can be merged')
-    parser.add_argument('--prevent-bad-patterns', action='store_true', help='Prevents patterns of belts that are not helpful, i.e. always substitutable for simpler configuration.')
-    parser.add_argument('--break-symmetry', action='store_true', help='Prevents vertical reflections being considered, sometimes unsound when applied with --prevent-bad-patterns')
+    parser.add_argument('--prevent-bad-patterns', action='store_true',
+                        help='Prevents patterns of belts that are not helpful, i.e. always substitutable for simpler configuration.')
+    parser.add_argument('--break-symmetry', action='store_true',
+                        help='Prevents vertical reflections being considered, sometimes unsound when applied with --prevent-bad-patterns')
     parser.add_argument('--use-ends', action='store_true', help='Allow ends to have non-empty tiles, asside from input/output belts')
     parser.add_argument('--fast', action='store_true', help='Enables all speed improving options')
     parser.add_argument('--aligned', action='store_true', help='Enforces balancer input aligns with output')

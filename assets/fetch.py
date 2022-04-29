@@ -1,4 +1,8 @@
-import sys, argparse, shutil, glob, json
+import argparse
+import glob
+import json
+import shutil
+import sys
 from os import path
 
 try:
@@ -6,6 +10,7 @@ try:
 except ModuleNotFoundError:
     print('"luaparser" not installed: recipe fetching will be disabled')
     ast = None
+
 
 def fetch_tilemaps(base_directory: str):
     graphics_directory = path.join(base_directory, 'graphics', 'entity')
@@ -34,14 +39,14 @@ def fetch_tilemaps(base_directory: str):
         ('splitter', 'hr-splitter-south.png'),
         ('splitter', 'hr-splitter-west-top_patch.png'),
         ('splitter', 'hr-splitter-west.png'),
-        
+
         ('transport-belt', 'hr-transport-belt.png'),
-        
+
         ('underground-belt', 'hr-underground-belt-structure.png'),
     ]
 
     for file in files:
-        source      = path.join(graphics_directory, *file)
+        source = path.join(graphics_directory, *file)
         destination = path.join(path.dirname(__file__), file[-1])
 
         print('Copying: {} -> {}'.format(source, destination))
@@ -50,10 +55,10 @@ def fetch_tilemaps(base_directory: str):
 
 def decode_lua_data(text):
     tree = ast.parse(text)
-    
+
     invoke, = tree.body.body
     assert invoke.source.id == 'data' and invoke.func.id == 'extend'
-    
+
     table, = invoke.args
     assert isinstance(table, ast.Table)
 
@@ -95,10 +100,9 @@ def get_recipes_for_variant(data, variant):
 
         if variant in entry:
             entry = entry[variant]
-        
+
         time = entry.get('energy_required', time)
-        
-        
+
         if 'ingredients' not in entry and ('result' not in entry or 'results' not in entry):
             entry = entry['normal']
 
@@ -117,14 +121,15 @@ def get_recipes_for_variant(data, variant):
                 results.append({'name': item['name'], 'amount': item['amount']})
         else:
             results = [{'name': entry['result'], 'amount': entry.get('result_count', 1)}]
-        
+
         recipes.append({
             'time': time,
-            'ingredients': ingredients, 
+            'ingredients': ingredients,
             'results': results
         })
     return recipes
-    
+
+
 def fetch_recipes(base_directory):
     data = []
     for file in glob.glob(path.join(base_directory, 'prototypes', 'recipe', '*.lua')):
@@ -135,12 +140,13 @@ def fetch_recipes(base_directory):
         assert isinstance(entry, list)
 
         data += entry
-    
+
     json.dump(data, open('temp.json', 'w'))
 
     for variant in ('normal', 'expensive'):
         with open(path.join(path.dirname(__file__), f'{variant}-recipes.json'), 'w') as f:
             json.dump(get_recipes_for_variant(data, variant), f)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Fetches Factorio tilemaps and recipes')

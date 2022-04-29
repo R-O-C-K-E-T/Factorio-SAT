@@ -1,24 +1,29 @@
-from collections import defaultdict
-import math, copy, argparse, json
+import argparse
+import collections
+import copy
+import json
+import math
 from os import path
+from typing import Tuple
 
 import numpy as np
-
 from pysat.solvers import Solver
+
+from tile import Belt, Splitter, UndergroundBelt
+from util import bin_length, direction_to_vec, get_popcount, read_number, set_not_number
 
 try:
     from graphviz import Digraph
-except:
-    pass
+except ModuleNotFoundError:
+    print('"graphviz" not installed: network rendering will not work')
 
 import blueprint
-from util import *
 
 
 def create_benes_network(size):
     assert size >= 2
     if size == 2:
-        return [((0,0), (1,1))]
+        return [((0, 0), (1, 1))]
     elif size % 2 == 1:
         inner = create_benes_network(size + 1)
 
@@ -65,6 +70,7 @@ def create_benes_network(size):
 
         return [((0, 0), (1, 2))] * inner_size + inner_a + inner_b
 
+
 def plot(network, filename=None, engine='dot'):
     g = Digraph(engine=engine, node_attr={'shape': 'rect', 'height': '0.5', 'width': '0.3'}, graph_attr={'rankdir': 'LR'})
 
@@ -78,7 +84,7 @@ def plot(network, filename=None, engine='dot'):
     INPUT_SIDE = False
     OUTPUT_SIDE = True
 
-    colour_occurences = defaultdict(set)
+    colour_occurences = collections.defaultdict(set)
     for i, (inputs, outputs) in enumerate(network):
         for colour in inputs:
             if colour is None:
@@ -88,7 +94,7 @@ def plot(network, filename=None, engine='dot'):
             if colour is None:
                 continue
             colour_occurences[colour].add((INPUT_SIDE, i))
-            
+
     for i, _ in enumerate(network):
         g.node(str(i), label='')
 
@@ -107,13 +113,14 @@ def plot(network, filename=None, engine='dot'):
                         g.edge(str(node), gen_node, arrowhead='none')
                     else:
                         g.edge(str(node), gen_node)
-                else: # Output side
+                else:  # Output side
                     g.edge(gen_node, str(node))
     if filename is None:
         g.render('Network', format='png', view=True, cleanup=True)
     else:
         prefix, ext = path.splitext(filename)
         g.render(prefix, format=ext[1:], view=False, cleanup=True)
+
 
 def remap_colours(network, colour_map):
     assert None not in colour_map
@@ -122,6 +129,7 @@ def remap_colours(network, colour_map):
     for ((in_a, in_b), (out_a, out_b)) in network:
         result.append(((colour_map.get(in_a, in_a), colour_map.get(in_b, in_b)), (colour_map.get(out_a, out_a), colour_map.get(out_b, out_b))))
     return result
+
 
 def fix_colours(network):
     input_colours = set()
@@ -141,7 +149,7 @@ def fix_colours(network):
     colour_map = {}
     for new_colour, old_colour in zip(range(0, len(all_colours)), input_colours):
         colour_map[old_colour] = new_colour
-    
+
     for new_colour, old_colour in zip(range(len(input_colours) + len(remaining_colours), len(all_colours)), output_colours):
         colour_map[old_colour] = new_colour
 
@@ -149,10 +157,11 @@ def fix_colours(network):
     for colour in remaining_colours:
         colour_map[colour] = current
         current += 1
-    
+
     assert len(colour_map) == len(all_colours)
 
     return remap_colours(network, colour_map)
+
 
 def simplify(network, allow_bottleneck=False):
     while True:
@@ -165,7 +174,7 @@ def simplify(network, allow_bottleneck=False):
 
                 colour_map = {}
                 for colour in output_colours:
-                    if colour is None:      
+                    if colour is None:
                         continue
                     colour_map[colour] = None
                 network = remap_colours(network, colour_map)
@@ -173,7 +182,7 @@ def simplify(network, allow_bottleneck=False):
                 break
 
             if all(colour is None for colour in output_colours):
-                
+
                 network = copy.deepcopy(network)
                 network.remove(node)
 
@@ -232,19 +241,19 @@ def simplify(network, allow_bottleneck=False):
                             if -1 not in input_set and input_set == set(colour_sources.get(colour, -1) for colour in input_b):
                                 network = copy.deepcopy(network)
                                 network.remove(node_a)
-                                
+
                                 network[network.index(node_b)] = input_a, (next(iter(output_a)), next(iter(output_b)))
 
                                 network = remap_colours(network, dict((colour, None) for colour in input_b))
                                 break
-                        
+
                         if len(input_a) == 1 and len(input_b) == 1 and len(output_a) == 2 and len(output_b) == 2:
                             output_set = set(colour_drains.get(colour, -1) for colour in output_a)
                             if -1 not in output_set and output_set == set(colour_drains.get(colour, -1) for colour in output_b):
                                 network = copy.deepcopy(network)
                                 network.remove(node_a)
                                 network[network.index(node_b)] = (next(iter(input_a)), next(iter(input_b))), output_a
-                                
+
                                 network = remap_colours(network, dict((colour, None) for colour in output_b))
                                 break
                 else:
@@ -252,8 +261,9 @@ def simplify(network, allow_bottleneck=False):
                 break
             else:
                 break
-    #network = fix_colours(network)
+    # network = fix_colours(network)
     return network
+
 
 def calculate_total_colours(network):
     colours = set()
@@ -261,11 +271,12 @@ def calculate_total_colours(network):
         colours |= set(inputs + outputs)
 
     colours.discard(None)
-    
+
     return len(colours)
 
+
 def get_input_output_colours(network) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-    occurences = defaultdict(lambda: 0)
+    occurences = collections.defaultdict(lambda: 0)
     for inputs, outputs in network:
         for input in inputs:
             occurences[input] += 1
@@ -287,8 +298,9 @@ def get_input_output_colours(network) -> Tuple[Tuple[int, int], Tuple[int, int]]
 
     assert input is not None
     assert output is not None
-    
+
     return input, output
+
 
 def get_exterior_colours(network):
     input_colours = set()
@@ -303,6 +315,7 @@ def get_exterior_colours(network):
 
     return input_colours - output_colours, output_colours - input_colours
 
+
 def calculate_network_size(network):
     input_colours = set()
     output_colours = set()
@@ -313,13 +326,14 @@ def calculate_network_size(network):
 
     input_colours.discard(None)
     output_colours.discard(None)
-    
+
     return len(input_colours - output_colours), len(output_colours - input_colours)
+
 
 def open_network(file):
     if isinstance(file, str):
         file = open(file)
-    
+
     network = []
     for line in file.readlines():
         line = line.strip()
@@ -340,10 +354,11 @@ def open_network(file):
         network.append((tuple(colours[:2]), tuple(colours[2:])))
     return network
 
+
 def save_network(file, network):
     if isinstance(file, str):
         file = open(file, 'w')
-    
+
     for input_colours, output_colours in network:
         all_colours = list(input_colours + output_colours)
         for i, colour in enumerate(all_colours):
@@ -352,8 +367,10 @@ def save_network(file, network):
 
         file.write(' '.join(map(str, all_colours)) + '\n')
 
+
 def flip_network(network):
     return [node[::-1] for node in network]
+
 
 def pop_count(value: int):
     assert value > 0
@@ -362,6 +379,7 @@ def pop_count(value: int):
         result += value & 1
         value >>= 1
     return result
+
 
 def calculate_cost(network):
     input_colours = set()
@@ -382,6 +400,7 @@ def calculate_cost(network):
                 cost += pop_count(side[0] ^ side[1])
     return cost
 
+
 def optimise_colours(network, solver='g3'):
     starting_cost = calculate_cost(network)
 
@@ -401,14 +420,14 @@ def optimise_colours(network, solver='g3'):
     clauses = []
 
     next_lit = 0
+
     def allocate():
         nonlocal next_lit
         next_lit += 1
         return next_lit
     labels = dict((colour, [allocate() for _ in range(length)]) for colour in all_colours)
 
-
-    for colour in range(len(all_colours), 1<<length):
+    for colour in range(len(all_colours), 1 << length):
         for label in labels.values():
             clauses.append(set_not_number(colour, label))
 
@@ -441,7 +460,7 @@ def optimise_colours(network, solver='g3'):
             counted += difference
 
     result_bits = bin_length(len(counted) + 1)
-    
+
     result = [allocate() for _ in range(result_bits)]
     clauses += get_popcount(counted, result, allocate)
 
@@ -457,13 +476,12 @@ def optimise_colours(network, solver='g3'):
                 break
 
             s.add_clause(set_not_number(cost, result))
-    
-    
+
     if model is None:
         return network
     else:
         cost += 1
-        
+
         values = {}
         for lit in model:
             values[abs(lit)] = lit > 0
@@ -471,11 +489,12 @@ def optimise_colours(network, solver='g3'):
         for initial_colour, literals in labels.items():
             colour = read_number([values[lit] for lit in literals])
             colour_map[initial_colour] = colour
-        
+
         result_network = remap_colours(network, colour_map)
         assert cost == calculate_cost(result_network)
 
         return result_network
+
 
 def parse_network(tiles, assume_edge_splitter_are_connected=False):
     tiles = tiles.T
@@ -493,7 +512,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
                 direction = tile.output_direction
             else:
                 direction = (tile.input_direction + 2) % 4
-            
+
             dx, dy = direction_to_vec(direction)
             x, y = pos
             return x + dx, y + dy
@@ -541,7 +560,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
     def trace(colour, pos, is_forward):
         if pos[0] < 0 or pos[0] >= tiles.shape[0] or pos[1] < 0 or pos[1] >= tiles.shape[1]:
             return
-        
+
         tile = tiles[pos]
         if tile is None:
             return
@@ -552,7 +571,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
         if colour_mapping[pos] is not None:
             assert colour_mapping[pos] == colour
             return
-        
+
         colour_mapping[pos] = colour
 
         trace(colour, next_tile(pos, is_forward), is_forward)
@@ -560,7 +579,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
     for x, row in enumerate(tiles):
         for y, tile in enumerate(row):
             if isinstance(tile, Splitter) and tile.is_head:
-                splitters.add((x,y))
+                splitters.add((x, y))
 
             if colour_mapping[x, y] is not None:
                 continue
@@ -568,14 +587,14 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
             if tile is None:
                 colour_mapping[x, y] = -1
                 continue
-            
+
             if not isinstance(tile, Splitter):
                 colour = current_colour
                 current_colour += 1
                 colour_mapping[x, y] = colour
 
-                trace(colour, next_tile((x,y), True), True)
-                trace(colour, next_tile((x,y), False), False)
+                trace(colour, next_tile((x, y), True), True)
+                trace(colour, next_tile((x, y), False), False)
 
     network = []
     for x, y in splitters:
@@ -608,7 +627,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
                             colour_pos = pos
                         else:
                             colour_pos = x + offset_b[0], y + offset_b[1]
-                        
+
                         colour = colour_mapping[colour_pos]
                         if colour is None:
                             colour = current_colour
@@ -636,23 +655,27 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
         current_colour += 1
     for colour in network_output_colours:
         mapping[colour] = current_colour
-    
+
     mapping.pop(None, None)
     network = remap_colours(network, mapping)
 
     return network
 
+
 def deduplicate_network(network):
-    key = lambda colour: -math.inf if colour is None else colour
+    def key(colour):
+        return -math.inf if colour is None else colour
     network = [(tuple(sorted(inputs, key=key)), tuple(sorted(outputs, key=key))) for inputs, outputs in network]
-    return Counter(network)
+    return collections.Counter(network)
+
 
 def tidy_network(network):
     network = fix_colours(network)
 
     input_colours, output_colours = get_exterior_colours(network)
 
-    none_key = lambda v: -1 if v is None else v
+    def none_key(v):
+        return -1 if v is None else v
 
     for i, node in enumerate(network):
         network[i] = tuple(tuple(sorted(side, key=none_key)) for side in node)
@@ -662,6 +685,7 @@ def tidy_network(network):
 
     return network
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Manipulate belt balancer networks')
     subparsers = parser.add_subparsers(dest='mode', required=True)
@@ -670,14 +694,14 @@ if __name__ == '__main__':
     create_parser.add_argument('network', type=argparse.FileType('w'), help='Output network destination')
     create_parser.add_argument('size', type=int, help='Size of the generated balancer')
 
-    #optimise_parser = subparsers.add_parser('optimise', help='Optimises a network colour layout (not guaranteed to reduce solver times)')
-    #optimise_parser.add_argument('input_network', type=argparse.FileType('r'), help='Input network destination')
-    #optimise_parser.add_argument('output_network', type=argparse.FileType('w'), help='Output network destination')
+    # optimise_parser = subparsers.add_parser('optimise', help='Optimises a network colour layout (not guaranteed to reduce solver times)')
+    # optimise_parser.add_argument('input_network', type=argparse.FileType('r'), help='Input network destination')
+    # optimise_parser.add_argument('output_network', type=argparse.FileType('w'), help='Output network destination')
 
     flip_parser = subparsers.add_parser('flip', help='Flips a network around (e.g 3 to 4 network -> 4 to 3 network)')
     flip_parser.add_argument('input_network', type=argparse.FileType('r'), help='Input network destination')
     flip_parser.add_argument('output_network', type=argparse.FileType('w'), help='Output network destination')
-    
+
     render_parser = subparsers.add_parser('render', help='Render a belt balancer network')
     render_parser.add_argument('network', type=argparse.FileType('r'), help='Network to render')
     render_parser.add_argument('output', nargs='?', type=str, help='File to render to')
@@ -707,7 +731,7 @@ if __name__ == '__main__':
         for i, row in enumerate(tiles):
             for j, item in enumerate(row):
                 tiles[i, j] = blueprint.read_tile(item)
-        
+
         network = parse_network(tiles, args.assume_valid_output)
         network = tidy_network(network)
 
@@ -716,7 +740,7 @@ if __name__ == '__main__':
     else:
         with args.input_network:
             in_network = open_network(args.input_network)
-        
+
         if args.mode == 'flip':
             out_network = flip_network(in_network)
             out_network = out_network[::-1]

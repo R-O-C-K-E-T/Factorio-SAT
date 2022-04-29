@@ -1,21 +1,27 @@
-import pygame, time, math, json, argparse, enum
+import argparse
+import enum
+import json
+import math
+import time
 from contextlib import contextmanager
+from typing import List, Optional
 
 import ffmpeg
-
 import numpy as np
-from pygame.locals import *
-
+import pygame
 from OpenGL.GL import *
 from OpenGL.GLU import *
+from pygame.locals import *
 
-
-from solver import Belt, UndergroundBelt, Splitter
+import blueprint
+from tile import AssemblingMachine, BaseTile, Inserter
+import tilemaps
+from solver import Belt, Splitter, UndergroundBelt
 from util import *
-import blueprint, tilemaps
 
 BELT_ANIMATION_LENGTH = 16
 SPLITTER_ANIMATION_LENGTH = 32
+
 
 @contextmanager
 def render_to_framebuffer(multisamples):
@@ -44,7 +50,7 @@ def draw_texture(texture, width=None, height=None):
     assert width is not None or height is not None
 
     glBindTexture(GL_TEXTURE_2D, texture)
-    texture_width  = glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH)
+    texture_width = glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH)
     texture_height = glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT)
 
     if width is None:
@@ -54,16 +60,16 @@ def draw_texture(texture, width=None, height=None):
 
     glEnable(GL_TEXTURE_2D)
     glBegin(GL_QUADS)
-        
+
     glTexCoord2f(0, 0)
     glVertex2f(0, 0)
-    
+
     glTexCoord2f(0, 1)
     glVertex2f(0, height)
-    
+
     glTexCoord2f(1, 1)
     glVertex2f(width, height)
-    
+
     glTexCoord2f(1, 0)
     glVertex2f(width, 0)
 
@@ -72,41 +78,45 @@ def draw_texture(texture, width=None, height=None):
 
     glBindTexture(GL_TEXTURE_2D, 0)
 
+
 def get_animation_length(solution):
     for tile in solution.reshape(-1):
         if tile.get('is_splitter') is True:
             return SPLITTER_ANIMATION_LENGTH
     return BELT_ANIMATION_LENGTH
 
+
 class RenderLayer(enum.Enum):
     BOTTOM = enum.auto()
-    TOP    = enum.auto()
+    TOP = enum.auto()
+
 
 def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
     if isinstance(tile, Belt):
         if layer == RenderLayer.BOTTOM:
             glPushMatrix()
             glTranslatef(-0.5, -0.5, 0)
-            tilemaps.BELT.render(animation % 16, [[11,8,4,7], [0,2,1,3], [6,10,9,5]][(tile.output_direction - tile.input_direction + 1) % 4][tile.input_direction])
+            tilemaps.BELT.render(animation % 16, [[11, 8, 4, 7], [0, 2, 1, 3], [6, 10, 9, 5]]
+                                 [(tile.output_direction - tile.input_direction + 1) % 4][tile.input_direction])
             glPopMatrix()
     elif isinstance(tile, UndergroundBelt):
         if layer == RenderLayer.BOTTOM:
             glPushMatrix()
             glTranslatef(-0.5, -0.5, 0)
-            
-            tilemaps.BELT.render(animation % 16, [[14,12,18,16], [19,17,15,13]][tile.is_input][tile.direction])
+
+            tilemaps.BELT.render(animation % 16, [[14, 12, 18, 16], [19, 17, 15, 13]][tile.is_input][tile.direction])
             glPopMatrix()
         elif layer == RenderLayer.TOP:
             glPushMatrix()
             glTranslatef(-1, -1, 0)
-            tilemaps.UNDERGROUND.render([[3,2,1,0], [1,0,3,2]][tile.is_input][tile.direction], tile.is_input)
-            
+            tilemaps.UNDERGROUND.render([[3, 2, 1, 0], [1, 0, 3, 2]][tile.is_input][tile.direction], tile.is_input)
+
             glPopMatrix()
     elif isinstance(tile, Splitter):
         if layer == RenderLayer.BOTTOM:
             glPushMatrix()
             glTranslatef(-0.5, -0.5, 0)
-            tilemaps.BELT.render(animation % 16, [0,2,1,3][tile.direction])
+            tilemaps.BELT.render(animation % 16, [0, 2, 1, 3][tile.direction])
             glPopMatrix()
         elif layer == RenderLayer.TOP:
             glPushMatrix()
@@ -126,16 +136,16 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
                     tilemaps.SPLITTER_WEST[1].render(animation % 8, (animation // 8) % 4)
             elif tile.direction == 1:
                 if not tile.is_head:
-                    tilemaps.SPLITTER_NORTH.render(animation % 8, (animation // 8) % 4, upper=(13/32,1))
+                    tilemaps.SPLITTER_NORTH.render(animation % 8, (animation // 8) % 4, upper=(13/32, 1))
                 else:
-                    tilemaps.SPLITTER_NORTH.render(animation % 8, (animation // 8) % 4, lower=(13/32,0))
+                    tilemaps.SPLITTER_NORTH.render(animation % 8, (animation // 8) % 4, lower=(13/32, 0))
             elif tile.direction == 3:
                 glTranslatef(-4/32, 0, 0)
                 if not tile.is_head:
-                    tilemaps.SPLITTER_SOUTH.render(animation % 8, (animation // 8) % 4, lower=(14/32,0))
+                    tilemaps.SPLITTER_SOUTH.render(animation % 8, (animation // 8) % 4, lower=(14/32, 0))
                 else:
                     glTranslatef(-1/32, 0, 0)
-                    tilemaps.SPLITTER_SOUTH.render(animation % 8, (animation // 8) % 4, upper=(14/32,1))
+                    tilemaps.SPLITTER_SOUTH.render(animation % 8, (animation // 8) % 4, upper=(14/32, 1))
             glPopMatrix()
     elif isinstance(tile, Inserter):
         if layer == RenderLayer.BOTTOM:
@@ -147,9 +157,9 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
             # Good enough
             t = (abs(1 - (animation / 16)) - 0.5)
 
-            if tile.type == 0: # Normal
+            if tile.type == 0:  # Normal
                 t *= 1.5
-            elif tile.type == 1: # Long
+            elif tile.type == 1:  # Long
                 t *= 3.75
             else:
                 assert False
@@ -164,14 +174,13 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
             if t < 0:
                 interior_angle *= -1
 
-
             base_angle = 90 * (2 - tile.direction) + interior_angle
 
             glPushMatrix()
 
-            glTranslatef(16/32, 16/32, 0) # 3
-            glRotatef(base_angle, 0, 0, 1) # 2
-            glTranslatef(-3.5/32, 0/32, 0) # 1
+            glTranslatef(16/32, 16/32, 0)  # 3
+            glRotatef(base_angle, 0, 0, 1)  # 2
+            glTranslatef(-3.5/32, 0/32, 0)  # 1
 
             draw_texture(tilemaps.INSERTER_HAND_BASE[tile.type], height=1)
 
@@ -189,7 +198,7 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
                 draw_texture(tilemaps.INSERTER_HAND_CLOSED[tile.type], height=1)
             else:
                 draw_texture(tilemaps.INSERTER_HAND_OPEN[tile.type], height=1)
-            
+
             glPopMatrix()
     elif isinstance(tile, AssemblingMachine):
         if layer == RenderLayer.BOTTOM:
@@ -226,7 +235,8 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
     else:
         assert False
 
-def render_solution(solution, animation: int, colouring=True, colour_count: Optional[int]=None, underground=True):
+
+def render_solution(solution, animation: int, colouring=True, colour_count: Optional[int] = None, underground=True):
     if colouring:
         all_colours = set()
         for item in solution.reshape(-1):
@@ -244,13 +254,12 @@ def render_solution(solution, animation: int, colouring=True, colour_count: Opti
         else:
             assert len(all_colours) <= colour_count
             palette = create_palette(colour_count)
-    
 
     for layer in RenderLayer:
         for x in reversed(range(solution.shape[1])):
             for y in range(solution.shape[0]):
                 item = solution[y, x]
-                
+
                 tile = blueprint.read_tile(item)
                 if tile is None:
                     continue
@@ -259,22 +268,20 @@ def render_solution(solution, animation: int, colouring=True, colour_count: Opti
                 if isinstance(colour, list):
                     colour = colour[0]
 
-                
-                        
                 glPushMatrix()
                 glTranslatef(x, y, 0)
-                
+
                 if colouring:
                     if colour is None:
-                        glColor3f(0.5,0.5,0.5)
+                        glColor3f(0.5, 0.5, 0.5)
                     else:
                         glColor3fv(palette[colour])
                 else:
                     glColor3f(1, 1, 1)
                 render_tile(tile, animation, layer)
-                
+
                 glPopMatrix()
-    
+
     if underground:
         for x in reversed(range(solution.shape[0])):
             for y in range(solution.shape[1]):
@@ -292,10 +299,10 @@ def render_solution(solution, animation: int, colouring=True, colour_count: Opti
                     colour = item.get('colour_ux', 0)
                     if isinstance(colour, list):
                         colour = colour[0]
-                    
+
                     if colouring:
                         if colour is None:
-                            glColor3f(0.5,0.5,0.5)
+                            glColor3f(0.5, 0.5, 0.5)
                         else:
                             glColor3fv(palette[colour])
                     else:
@@ -309,10 +316,10 @@ def render_solution(solution, animation: int, colouring=True, colour_count: Opti
                     colour = item.get('colour_uy', 0)
                     if isinstance(colour, list):
                         colour = colour[0]
-                    
+
                     if colouring:
                         if colour is None:
-                            glColor3f(0.5,0.5,0.5)
+                            glColor3f(0.5, 0.5, 0.5)
                         else:
                             glColor3fv(palette[colour])
                     else:
@@ -321,7 +328,7 @@ def render_solution(solution, animation: int, colouring=True, colour_count: Opti
                     glBegin(GL_LINES)
                     glVertex2f(0.5, 0)
                     glVertex2f(0.5, 1)
-                    glEnd() 
+                    glEnd()
                 glPopMatrix()
 
 
@@ -332,7 +339,7 @@ def render_attributes(solution, font, names: List[str]):
     texture = tilemaps.gen_texture_2d()
 
     glEnable(GL_TEXTURE_2D)
-    glColor3f(1,1,1)
+    glColor3f(1, 1, 1)
 
     text_grid = np.empty_like(solution, dtype=object)
     for y in range(solution.shape[0]):
@@ -352,19 +359,18 @@ def render_attributes(solution, font, names: List[str]):
                     if piece not in sub_item:
                         raise RuntimeError('{} not found in tile {}'.format(name, item))
                     sub_item = sub_item[piece]
-                        
-                    
+
                 text = str(np.array(sub_item))
                 for line in text.split('\n'):
                     lines.append(line)
 
             text_grid[y, x] = lines
-    
+
     max_width = 0
     max_height = 0
     for lines in text_grid.reshape(-1):
         sizes = [font.size(line) for line in lines]
-        
+
         width = max(width for width, _ in sizes)
         height = sum(height for _, height in sizes)
 
@@ -381,29 +387,29 @@ def render_attributes(solution, font, names: List[str]):
             lines = text_grid[y, x]
             glPushMatrix()
             glTranslatef(x, y, 0)
-            
+
             for line in lines:
-                surface = font.render(line, True, (255, 0, 0), (0,0,0)) 
+                surface = font.render(line, True, (255, 0, 0), (0, 0, 0))
 
                 data = np.empty((*surface.get_size()[::-1], 4), dtype=np.uint8)
-                data[:,:,-1] = pygame.surfarray.array3d(surface)[:,:,0].T
-                data[:,:,:-1] = 0, 0, 255
+                data[:, :, -1] = pygame.surfarray.array3d(surface)[:, :, 0].T
+                data[:, :, :-1] = 0, 0, 255
 
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface.get_width(), surface.get_height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, data)
 
-                tile_width  = scale * surface.get_width()
+                tile_width = scale * surface.get_width()
                 tile_height = scale * surface.get_height()
 
                 glBegin(GL_QUADS)
                 glTexCoord(0, 0)
                 glVertex2f(0, 0)
-                
+
                 glTexCoord(0, 1)
                 glVertex2f(0, tile_height)
-                
+
                 glTexCoord(1, 1)
                 glVertex2f(tile_width, tile_height)
-                
+
                 glTexCoord(1, 0)
                 glVertex2f(tile_width, 0)
                 glEnd()
@@ -412,17 +418,18 @@ def render_attributes(solution, font, names: List[str]):
 
             glPopMatrix()
 
-    glDisable(GL_TEXTURE_2D)            
+    glDisable(GL_TEXTURE_2D)
 
     glDeleteTextures(1, [texture])
 
+
 def render_grid(start_x: float, stop_x: float, start_y: float, stop_y: float):
     glBegin(GL_LINES)
-            
+
     for x in range(math.floor(start_x), math.ceil(stop_x)):
         glVertex2f(x, start_y)
         glVertex2f(x, stop_y)
-                
+
     for y in range(math.floor(start_y), math.ceil(stop_y)):
         glVertex2f(start_x, y)
         glVertex2f(stop_x, y)
@@ -443,11 +450,12 @@ def draw_arrow():
 
     glEnd()
 
+
 def HSVtoRGB(hue: float, sat: float, val: float):
     c = val * sat
     hue = (hue % 1) * 6
     x = c * (1 - abs((hue % 2) - 1))
-    if   hue > 5:
+    if hue > 5:
         out = c, 0, x
     elif hue > 4:
         out = x, 0, c
@@ -461,9 +469,10 @@ def HSVtoRGB(hue: float, sat: float, val: float):
         out = c, x, 0
     return np.array(out) + (val - c)
 
+
 def create_palette(colours):
     if colours == 1:
-        return np.array([[1.0,1.0,1.0]])
+        return np.array([[1.0, 1.0, 1.0]])
     elif colours <= 3:
         return np.array([
             [1, 0.5, 0.5],
@@ -473,16 +482,16 @@ def create_palette(colours):
     else:
         return np.array([HSVtoRGB(i / colours, 0.4, 1.0) for i in range(colours)])
 
+
 def export_video(frames, filename):
     _, height, width, _ = frames.shape
     process = ffmpeg.input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height))
-            
+
     if filename.endswith('gif'):
         process = process.output(filename, loop=0, r=60)
     else:
         process = process.output(filename, pix_fmt='yuv420p', vcodec='libx264', r=60)
-    
-    
+
     process = process.overwrite_output().run_async(pipe_stdin=True)
     for frame in frames.astype(np.uint8):
         process.stdin.write(frame.tobytes())
@@ -506,8 +515,9 @@ if __name__ == '__main__':
         raise RuntimeError('Cell size must be greater than 0')
 
     padding_pixels = round(2 * args.padding * args.cell_size)
+
     def grid_size(solution):
-        return max(solution.shape[1] * args.cell_size + padding_pixels, 1), max(solution.shape[0] * args.cell_size  + padding_pixels, 1)
+        return max(solution.shape[1] * args.cell_size + padding_pixels, 1), max(solution.shape[0] * args.cell_size + padding_pixels, 1)
 
     def increment_solution(amount):
         global index, framebuffers, input_closed
@@ -520,10 +530,10 @@ if __name__ == '__main__':
             except EOFError:
                 print('All solutions found')
                 input_closed = True
-        
+
         index = index % len(solutions)
         size = grid_size(solutions[index])
-        pygame.display.set_mode(size, OPENGL|DOUBLEBUF)
+        pygame.display.set_mode(size, OPENGL | DOUBLEBUF)
         glViewport(0, 0, *size)
 
         glDeleteFramebuffers(len(framebuffers), list(framebuffers.values()))
@@ -541,7 +551,7 @@ if __name__ == '__main__':
         exit()
     solutions = [solution]
 
-    #print(solution.shape)
+    # print(solution.shape)
 
     pygame.display.init()
     pygame.font.init()
@@ -552,26 +562,26 @@ if __name__ == '__main__':
         pygame.display.gl_set_attribute(GL_MULTISAMPLEBUFFERS, 1)
         pygame.display.gl_set_attribute(GL_MULTISAMPLESAMPLES, multisamples)'''
 
-    pygame.display.set_mode(grid_size(solutions[-1]), OPENGL|DOUBLEBUF)
-    
+    pygame.display.set_mode(grid_size(solutions[-1]), OPENGL | DOUBLEBUF)
+
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    
+
     tilemaps.init()
-    
-    glClearColor(1,1,1,1)
+
+    glClearColor(1, 1, 1, 1)
 
     clock = pygame.time.Clock()
 
     title = 'Belt Balancer'
     pygame.display.set_caption(title)
-    
+
     input_closed = False
 
     waiting_to_save = False
 
     framebuffers = {}
-    
+
     t = 0
     index = 0
     try:
@@ -606,12 +616,12 @@ if __name__ == '__main__':
                     glMatrixMode(GL_MODELVIEW)
 
                     glLineWidth(1)
-                    glColor3f(1,0,0)
+                    glColor3f(1, 0, 0)
                     render_grid(-args.padding, solutions[index].shape[1] + args.padding, -args.padding, solutions[index].shape[0] + args.padding)
-                    
+
                     render_solution(solutions[index], animation, not args.hide_colour, args.colour_count, args.show_underground)
                     render_attributes(solutions[index], font, args.show_raw)
-                
+
                 framebuffers[animation] = framebuffer
             else:
                 framebuffer = framebuffers[animation]
@@ -619,11 +629,11 @@ if __name__ == '__main__':
             _, _, width, height = glGetIntegerv(GL_VIEWPORT)
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0)
             glDrawBuffer(GL_BACK)
-            
+
             glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer)
             glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST)
-            
-            glBindFramebuffer(GL_FRAMEBUFFER, 0) 
+
+            glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
             if (waiting_to_save or args.export_all) and all(i in framebuffers for i in range(animation_length)):
                 waiting_to_save = False
@@ -640,7 +650,7 @@ if __name__ == '__main__':
                     framebuffer = framebuffers[i]
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer)
                     glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_LINEAR)
-                    
+
                     data = glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE)
                     frames[i] = np.frombuffer(data, np.uint8).reshape((height, width, 3))
 
@@ -650,8 +660,8 @@ if __name__ == '__main__':
                 glDeleteTextures(1, [texture])
                 glDeleteFramebuffers(1, [intermediate_framebuffer])
 
-                frames = frames[:, ::-1, :, :] # Vertical flip
-                
+                frames = frames[:, ::-1, :, :]  # Vertical flip
+
                 if args.export_format == 'gif':
                     filename = '{}.gif'.format(index)
                 else:
@@ -660,9 +670,9 @@ if __name__ == '__main__':
 
                 if args.export_all:
                     increment_solution(1)
-                    if index == 0: # Must have found all solutions
+                    if index == 0:  # Must have found all solutions
                         running = False
-                
+
             pygame.display.flip()
 
             if not args.export_all:
@@ -670,4 +680,3 @@ if __name__ == '__main__':
             t += 1
     finally:
         pygame.quit()
-

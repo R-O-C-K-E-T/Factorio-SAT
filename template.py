@@ -1,30 +1,36 @@
+import collections
 import enum
-from typing import *
-
-import inspect, shlex, subprocess, tempfile, sys, io, collections
+import inspect
+import io
+import shlex
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, Generic, Iterator, List, NamedTuple, Optional, Protocol, Sequence, Tuple, TypeVar, Union
 
 import numpy as np
-
-from pysat.solvers import Solver
 from pysat.formula import CNF, IDPool
+from pysat.solvers import Solver
 
 from ipasir import IPASIRLibrary
+from util import ClauseList, LiteralType, read_number
 
-from util import *
 
 class EdgeMode(enum.Enum):
     NO_WRAP = enum.auto()
-    WRAP   = enum.auto()
+    WRAP = enum.auto()
 
 
 EdgeModeType = Union[Tuple[EdgeMode, EdgeMode], EdgeMode]
+
 
 def expand_edge_mode(edge_mode: EdgeMode) -> Tuple[EdgeMode, EdgeMode]:
     if isinstance(edge_mode, EdgeMode):
         return edge_mode, edge_mode
     else:
         return edge_mode
+
 
 def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[LiteralType]]:
     def interpret_solver_answer(stdout):
@@ -37,18 +43,18 @@ def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[LiteralTy
             # if line.startswith('c partial'):
             #     pieces = line.split(' ')[2:-1]
             #     partials.append([int(x) for x in pieces])
-            
+
             print(line, file=sys.stderr, end='')
-        
+
         # with open('partials.json', 'w') as f:
         #     json.dump(partials, f)
 
         if line.startswith('s UNSATISFIABLE'):
             return None
-        
+
         if not line.startswith('s SATISFIABLE'):
             raise RuntimeError('Unknown solution status: ' + line)
-        
+
         model = []
         while True:
             line = result.readline()
@@ -85,13 +91,14 @@ def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[LiteralTy
 T = TypeVar('T')
 NestedArray = Union[T, List['NestedArray']]
 
+
 def flatten(tile: Union[NamedTuple, NestedArray[LiteralType]]) -> List[LiteralType]:
     if isinstance(tile, LiteralType):
         return [tile]
-    
+
     if hasattr(tile, '_asdict'):
         tile = tile._asdict().values()
-    
+
     result = []
     for member in tile:
         result += flatten(member)
@@ -100,6 +107,7 @@ def flatten(tile: Union[NamedTuple, NestedArray[LiteralType]]) -> List[LiteralTy
 
 InstanceType = TypeVar('InstanceType')
 ParsedType = TypeVar('ParsedType')
+
 
 class Template(Protocol[InstanceType, ParsedType]):
     shape: Tuple[int, ...]
@@ -110,6 +118,7 @@ class Template(Protocol[InstanceType, ParsedType]):
 
     def parse(self, instance: InstanceType, mapping: Dict[int, bool]) -> ParsedType:
         ...
+
 
 @dataclass(frozen=True)
 class BoolTemplate(Template[LiteralType, bool]):
@@ -123,26 +132,25 @@ class BoolTemplate(Template[LiteralType, bool]):
     def parse(self, instance: LiteralType, mapping: Dict[int, bool]) -> bool:
         return mapping[instance]
 
-I = TypeVar('I')
-P = TypeVar('P')
 
 @dataclass(frozen=True)
-class ArrayTemplate(Template[NestedArray[I], NestedArray[P]]):
-    component: Template[I, P]
+class ArrayTemplate(Template[NestedArray[InstanceType], NestedArray[ParsedType]]):
+    component: Template[InstanceType, ParsedType]
     shape: Tuple[int, ...]
 
     @property
     def variable_count(self):
         return int(np.product(self.shape)) * self.component.variable_count
 
-    def instantiate(self, pool: IDPool) -> NestedArray[I]:
+    def instantiate(self, pool: IDPool) -> NestedArray[InstanceType]:
         composed = np.empty(np.product(self.shape), dtype=object)
         for i in range(len(composed)):
             composed[i] = self.component.instantiate(pool)
         return np.reshape(composed, self.shape).tolist()
 
-    def parse(self, instance: NestedArray[I], mapping: Dict[int, bool]) -> NestedArray[P]:
+    def parse(self, instance: NestedArray[InstanceType], mapping: Dict[int, bool]) -> NestedArray[ParsedType]:
         assert isinstance(instance, list)
+
         def recurse(sub_instance: NestedArray[bool], shape: Tuple[int, ...]):
             if len(shape) == 0:
                 return self.component.parse(sub_instance, mapping)
@@ -152,7 +160,10 @@ class ArrayTemplate(Template[NestedArray[I], NestedArray[P]]):
 
         return recurse(instance, self.shape)
 
+
 T = TypeVar('T')
+
+
 @dataclass(frozen=True)
 class SizedTemplate(Template[List[LiteralType], T]):
     size: int
@@ -164,11 +175,13 @@ class SizedTemplate(Template[List[LiteralType], T]):
     def instantiate(self, pool: IDPool) -> List[LiteralType]:
         return [pool._next() for _ in range(self.size)]
 
+
 @dataclass(frozen=True)
 class ManyHotTemplate(SizedTemplate[List[int]]):
     def parse(self, instance: List[LiteralType], mapping: Dict[int, bool]) -> List[int]:
         assert isinstance(instance, list)
         return [j for j, lit in enumerate(instance) if mapping[lit]]
+
 
 @dataclass(frozen=True)
 class OneHotTemplate(SizedTemplate[Optional[int]]):
@@ -179,6 +192,7 @@ class OneHotTemplate(SizedTemplate[Optional[int]]):
                 return i
         return None
 
+
 @dataclass(frozen=True)
 class NumberTemplate(SizedTemplate[int]):
     is_signed: bool = False
@@ -187,7 +201,9 @@ class NumberTemplate(SizedTemplate[int]):
         assert isinstance(instance, list)
         return read_number([mapping[lit] for lit in instance], self.is_signed)
 
+
 CompositeTemplateParams = Dict[str, Union[Template[Any, Any], Callable, 'CompositeTemplateParams']]
+
 
 def call_ignoring_unused(func: Callable[..., T], args: Dict[str, Any]) -> T:
     if func.__code__.co_flags & inspect.CO_VARKEYWORDS:
@@ -195,6 +211,7 @@ def call_ignoring_unused(func: Callable[..., T], args: Dict[str, Any]) -> T:
     else:
         inputs = set(func.__code__.co_varnames)
         return func(**{name: val for name, val in args.items() if name in inputs})
+
 
 class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
     def __init__(self, template: CompositeTemplateParams):
@@ -217,12 +234,12 @@ class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
 
         for name, item_type in self._atomics.items():
             result[name] = item_type.parse(tile_dict[name], mapping)
-        
+
         return result
 
     def instantiate(self, pool: IDPool) -> NamedTuple:
         members: Dict[str, Any] = {}
-        
+
         for name, item_type in self._atomics.items():
             members[name] = item_type.instantiate(pool)
 
@@ -241,11 +258,9 @@ class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
 
     __str__ = __repr__
 
-I = TypeVar('I')
-P = TypeVar('P')
 
-class BaseGrid(Generic[I, P]):
-    def __init__(self, template: Template[I, P], width: int, height: int, pool: Optional[IDPool]=None):
+class BaseGrid(Generic[InstanceType, ParsedType]):
+    def __init__(self, template: Template[InstanceType, ParsedType], width: int, height: int, pool: Optional[IDPool] = None):
         assert width > 0 and height > 0
         self.template = template
         self.width = width
@@ -256,8 +271,8 @@ class BaseGrid(Generic[I, P]):
         else:
             self.pool = pool
 
-        self.tiles = np.frompyfunc(lambda i, j: template.instantiate(self.pool), 2, 1)(*np.ogrid[0:height,0:width])
-        
+        self.tiles = np.frompyfunc(lambda i, j: template.instantiate(self.pool), 2, 1)(*np.ogrid[0:height, 0:width])
+
         self.clauses: ClauseList = []
 
     @property
@@ -268,12 +283,22 @@ class BaseGrid(Generic[I, P]):
     def tile_size(self):
         return self.template.variable_count
 
-    def iterate_tiles(self) -> Iterator[I]:
+    def iterate_tiles(self) -> Iterator[InstanceType]:
         for x in range(self.width):
             for y in range(self.height):
                 yield self.get_tile_instance(x, y)
 
-    def iterate_tile_blocks(self, columnwise_dir: Tuple[int, int], column_count: int, rowwise_dir: Tuple[int, int], row_count: int, edge_mode: EdgeModeType, min_x: Optional[int]=None, min_y: Optional[int]=None, max_x: Optional[int]=None, max_y: Optional[int]=None) -> Iterator[np.ndarray]:
+    def iterate_tile_blocks(
+            self,
+            columnwise_dir: Tuple[int, int],
+            column_count: int,
+            rowwise_dir: Tuple[int, int],
+            row_count: int,
+            edge_mode: EdgeModeType,
+            min_x: Optional[int] = None,
+            min_y: Optional[int] = None,
+            max_x: Optional[int] = None,
+            max_y: Optional[int] = None) -> Iterator[np.ndarray]:
         cx, cy = columnwise_dir
         rx, ry = rowwise_dir
         assert abs(cx) + abs(cy) == 1
@@ -283,6 +308,9 @@ class BaseGrid(Generic[I, P]):
 
         max_x_offset = rx * (row_count - 1) + cx * (column_count - 1)
         max_y_offset = ry * (row_count - 1) + cy * (column_count - 1)
+
+        def get_tile(row, col):
+            return self.get_tile_instance_offset(x, y, rx * row + cx * col, ry * row + cy * col, edge_mode)
 
         for x in range(self.width):
             for y in range(self.height):
@@ -307,27 +335,27 @@ class BaseGrid(Generic[I, P]):
                     if x + max_y_offset > max_y:
                         continue
 
-                yield np.frompyfunc(lambda i, j: self.get_tile_instance_offset(x, y, rx*i + cx*j, ry*i + cy*j, edge_mode), 2, 1)(*np.ogrid[0:row_count, 0:column_count])
+                yield np.frompyfunc(get_tile, 2, 1)(*np.ogrid[0:row_count, 0:column_count])
 
-    def iterate_tile_lines(self, direction: Tuple[int, int], length: int, edge_mode: EdgeModeType) -> Iterator[Sequence[Optional[I]]]:
+    def iterate_tile_lines(self, direction: Tuple[int, int], length: int, edge_mode: EdgeModeType) -> Iterator[Sequence[Optional[InstanceType]]]:
         dx, dy = direction
         assert abs(dx) + abs(dy) == 1
         assert length > 0
 
         for x in range(self.width):
             for y in range(self.height):
-                yield np.frompyfunc(lambda i: self.get_tile_instance_offset(x, y, dx*i, dy*i, edge_mode), 1, 1)(np.arange(length))
+                yield np.frompyfunc(lambda i: self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode), 1, 1)(np.arange(length))
 
     def allocate_variable(self) -> LiteralType:
         return self.pool._next()
 
-    def get_tile_instance(self, x: int, y: int) -> I:
+    def get_tile_instance(self, x: int, y: int) -> InstanceType:
         assert x >= 0 and y >= 0 and x < self.width and y < self.height
         return self.tiles[y, x]
 
-    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int, edge_mode: EdgeModeType) -> Optional[I]:
+    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int, edge_mode: EdgeModeType) -> Optional[InstanceType]:
         edge_mode = expand_edge_mode(edge_mode)
-        
+
         pos = [x + dx, y + dy]
         size = self.width, self.height
 
@@ -347,10 +375,10 @@ class BaseGrid(Generic[I, P]):
         mapping.update({abs(lit): lit > 0 for lit in solution})
         return np.frompyfunc(lambda tile: self.template.parse(tile, mapping), 1, 1)(self.tiles)
 
-    def check(self, solver: str='g3'):
+    def check(self, solver: str = 'g3'):
         return self.solve(solver) is not None
-    
-    def solve(self, solver: str='g3'):
+
+    def solve(self, solver: str = 'g3'):
         if solver.startswith('cmd:'):
             solution = run_command_solver(solver[4:], self.clauses)
             if solution is None:
@@ -362,14 +390,14 @@ class BaseGrid(Generic[I, P]):
                 s.add_clauses(self.clauses)
             else:
                 s = Solver(name=solver, bootstrap_with=self.clauses)
-            
+
             with s:
                 if s.solve():
                     return self.parse_solution(s.get_model())
                 else:
                     return None
 
-    def itersolve(self, important_variables=set(), solver: str='g3') -> Iterator[np.ndarray]:
+    def itersolve(self, important_variables=set(), solver: str = 'g3') -> Iterator[np.ndarray]:
         if solver.startswith('cmd:'):
             solution = run_command_solver(solver[4:], self.clauses)
             if solution is None:
@@ -381,14 +409,29 @@ class BaseGrid(Generic[I, P]):
                 s.add_clauses(self.clauses)
             else:
                 s = Solver(name=solver, bootstrap_with=self.clauses)
-            
+
             with s:
                 while s.solve():
                     solution = s.get_model()
                     yield self.parse_solution(solution)
-                    
+
                     s.add_clause([-lit for lit in solution if abs(lit) in important_variables])
 
-    def write(self, filename: str, comments: Optional[List[str]]=None):
+    def write(self, filename: str, comments: Optional[List[str]] = None):
         cnf = CNF(from_clauses=self.clauses)
         cnf.to_file(filename, comments)
+
+
+__all__ = [
+    'ArrayTemplate',
+    'BaseGrid',
+    'BoolTemplate',
+    'CompositeTemplate',
+    'CompositeTemplateParams',
+    'EdgeMode',
+    'EdgeModeType',
+    'NestedArray',
+    'NumberTemplate',
+    'OneHotTemplate',
+    'flatten'
+]

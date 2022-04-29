@@ -1,9 +1,12 @@
-import argparse, json, sys
+import argparse
+import json
+import sys
 
+import optimisations
 from solver import Grid
 from template import EdgeMode
-from util import *
-import optimisations
+from util import direction_to_vec, invert_components, set_literal, set_number, set_numbers
+
 
 def prevent_passing(grid: Grid):
     assert len(grid.get_tile_instance(0, 0).colour) == 1
@@ -13,53 +16,55 @@ def prevent_passing(grid: Grid):
         for block in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec((direction + 1) % 4), 2, EdgeMode.NO_WRAP):
             if (block == None).any():
                 continue
-            
+
             for colour_sign in (False, True):
                 grid.clauses.append(invert_components([
-                   set_literal(block[0,0].colour[0], colour_sign),
-                   set_literal(block[0,1].colour[0], colour_sign),
-                   set_literal(block[1,0].colour[0], colour_sign),
-                   set_literal(block[1,1].colour[0], colour_sign),
+                    set_literal(block[0, 0].colour[0], colour_sign),
+                    set_literal(block[0, 1].colour[0], colour_sign),
+                    set_literal(block[1, 0].colour[0], colour_sign),
+                    set_literal(block[1, 1].colour[0], colour_sign),
 
-                   block[0,0].input_direction[direction],
-                   block[0,0].output_direction[direction],
-                   block[0,1].input_direction[direction],
-                   block[0,1].output_direction[direction],
+                    block[0, 0].input_direction[direction],
+                    block[0, 0].output_direction[direction],
+                    block[0, 1].input_direction[direction],
+                    block[0, 1].output_direction[direction],
 
-                   block[1,0].input_direction[inv_direction],
-                   block[1,0].output_direction[inv_direction],
-                   block[1,1].input_direction[inv_direction],
-                   block[1,1].output_direction[inv_direction],
+                    block[1, 0].input_direction[inv_direction],
+                    block[1, 0].output_direction[inv_direction],
+                    block[1, 1].input_direction[inv_direction],
+                    block[1, 1].output_direction[inv_direction],
                 ]))
+
 
 def prevent_awkward_underground_entry(grid: Grid):
     for direction in range(4):
         inv_direction = (direction + 2) % 4
         across_direction = (direction + 1) % 4
         for block in grid.iterate_tile_blocks(direction_to_vec(across_direction), 3, direction_to_vec(direction), 3, EdgeMode.NO_WRAP):
-            block[0, 1:3] = None # Unimportant tiles
+            block[0, 1:3] = None  # Unimportant tiles
 
             if (block == None).any():
                 continue
-            
-            grid.clauses.append(invert_components([
-                *invert_components(block[0,0].all_direction),
-                block[0,0].underground[direction],
 
-                -block[1,0].underground[direction],
-                
-                *invert_components(block[1,1].all_direction),
+            grid.clauses.append(invert_components([
+                *invert_components(block[0, 0].all_direction),
+                block[0, 0].underground[direction],
+
+                -block[1, 0].underground[direction],
+
+                *invert_components(block[1, 1].all_direction),
 
                 # block[2,0].input_direction[direction],
-                block[2,0].output_direction[across_direction],
+                block[2, 0].output_direction[across_direction],
 
                 # block[2,1].input_direction[across_direction],
-                block[2,1].output_direction[across_direction],
+                block[2, 1].output_direction[across_direction],
 
-                block[2,2].output_direction[inv_direction],
+                block[2, 2].output_direction[inv_direction],
 
-                block[1,2].output_direction[inv_direction],
+                block[1, 2].output_direction[inv_direction],
             ]))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Finds an interchange for building composite balancers')
@@ -79,11 +84,9 @@ if __name__ == '__main__':
 
     grid = Grid(args.width, args.height, 2, args.underground_length)
 
-
     # No splitters
     for tile in grid.iterate_tiles():
         grid.clauses.append([-tile.is_splitter])
-
 
     for y in range(0, grid.height):
         grid.clauses.append([grid.get_tile_instance(0, y).input_direction[0]])
@@ -96,12 +99,12 @@ if __name__ == '__main__':
 
     if args.alternating:
         for y in range(grid.height):
-            tile = grid.get_tile_instance(grid.width-1, y)
+            tile = grid.get_tile_instance(grid.width - 1, y)
             grid.clauses += set_number(y % 2, tile.colour)
     else:
         for y in range(0, grid.height, 2):
-            tile0 = grid.get_tile_instance(grid.width-1, y)
-            tile1 = grid.get_tile_instance(grid.width-1, y+1)
+            tile0 = grid.get_tile_instance(grid.width - 1, y)
+            tile1 = grid.get_tile_instance(grid.width - 1, y + 1)
             grid.clauses += set_numbers(0, 1, tile0.colour, tile1.colour)
 
     grid.block_underground_through_edges()
@@ -124,7 +127,6 @@ if __name__ == '__main__':
     prevent_awkward_underground_entry(grid)
     # for tile in grid.iterate_tiles():
     #     grid.clauses += implies(invert_components(tile.all_direction), set_all_false(tile.underground))
-    
 
     print(len(grid.clauses), file=sys.stderr)
 

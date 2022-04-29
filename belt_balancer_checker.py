@@ -1,11 +1,13 @@
-import argparse, json, sys
+import argparse
+import json
+import sys
+
 import numpy as np
+
+import belt_balancer
+import blueprint
+from network import deduplicate_network, open_network
 from template import EdgeMode
-
-from util import *
-from network import open_network, deduplicate_network
-import belt_balancer, blueprint
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Checks that the provided balancer meshes with the provided network')

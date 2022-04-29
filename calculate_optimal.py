@@ -1,16 +1,24 @@
-import json, math, os, asyncio, argparse
+import argparse
+import asyncio
 import concurrent.futures
+import json
+import math
+import os
+
 import numpy as np
 
-from network import open_network, get_input_output_colours, deduplicate_network
-import belt_balancer, blueprint, optimisations
+import belt_balancer
+import blueprint
+import optimisations
+from network import deduplicate_network, get_input_output_colours, open_network
 from template import EdgeMode
 
 MAXIMUM_UNDERGROUND_LENGTHS = {
-    'normal'  : 4,
-    'fast'    : 6,
-    'express' : 8,
+    'normal': 4,
+    'fast': 6,
+    'express': 8,
 }
+
 
 def factors(value):
     for test in reversed(range(1, math.floor(math.sqrt(value)) + 1)):
@@ -27,10 +35,11 @@ def get_offsets(height, input_size, output_size):
         for start_offset, end_offset in get_offsets(height, output_size, input_size):
             yield end_offset, start_offset
         return
-    
+
     for end_offset in range(height - output_size + 1):
         for i in range(output_size - input_size + 1):
             yield i + end_offset, end_offset
+
 
 def solve_balancer(network, size, solver):
     maximum_underground_length, width, height = size
@@ -41,12 +50,12 @@ def solve_balancer(network, size, solver):
     grid.prevent_intersection(EdgeMode.NO_WRAP)
     belt_balancer.setup_balancer_ends(grid, network, True, False)
 
-    optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
+    optimisations.expand_underground(grid, min_x=1, max_x=grid.width - 2)
     optimisations.apply_generic_optimisations(grid)
 
     belt_balancer.enforce_edge_splitters(grid, network)
     grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
-    
+
     solution = grid.solve(solver)
     if solution is None:
         return None
@@ -73,11 +82,11 @@ class NetworkSolutionStore:
 
     def clean(self):
         for size, exist in list(self.exist.items()):
-            if exist != False:
+            if exist is not False:
                 continue
             del self.exist[size]
 
-            if self.does_balancer_exist(size) != False:
+            if self.does_balancer_exist(size) is not False:
                 self.exist[size] = exist
 
     def from_json(self, data):
@@ -85,7 +94,7 @@ class NetworkSolutionStore:
         for key, val in data.get('exist', {}).items():
             underground_length, width, height = map(int, key.split(','))
             self.exist[underground_length, width, height] = val
-        
+
         self.solutions = {}
         for key, val in data.get('solutions', {}).items():
             underground_length, width, height = map(int, key.split(','))
@@ -103,7 +112,8 @@ class NetworkSolutionStore:
             self.solutions[size] = solution
 
     def best_current_solution(self, loss, underground_length):
-        return min(((size, solution) for size, solution in self.solutions.items() if size[0] <= underground_length and loss(size[1:]) != float('inf')), key=lambda v: loss(v[0][1:]), default=[None]*2)[1]
+        found_solutions = ((size, solution) for size, solution in self.solutions.items() if size[0] <= underground_length and loss(size[1:]) != float('inf'))
+        return min(found_solutions, key=lambda v: loss(v[0][1:]), default=[None] * 2)[1]
 
     def next_length_size(self, underground_length):
         (_, input_count), (_, output_count) = get_input_output_colours(self.network)
@@ -126,7 +136,7 @@ class NetworkSolutionStore:
         area = min_height
         while True:
             for width, height in factors(area):
-                if height < min_height or height > 2*min_height:
+                if height < min_height or height > 2 * min_height:
                     continue
 
                 size = underground_length, width + 2, height
@@ -137,11 +147,13 @@ class NetworkSolutionStore:
                     return size
             area += 1
 
+
 def get_belt_level(underground_length: int):
     for belt_level, length in sorted(MAXIMUM_UNDERGROUND_LENGTHS.items(), key=lambda i: i[1]):
         if underground_length <= length:
             return belt_level
-    return belt_level # If none work, then just use the biggest
+    return belt_level  # If none work, then just use the biggest
+
 
 if __name__ == '__main__':
     base_path = 'networks'
@@ -188,14 +200,14 @@ if __name__ == '__main__':
                         tiles[i, j] = blueprint.read_tile(entry)
                 return blueprint.encode_blueprint(blueprint.make_blueprint(tiles, label, get_belt_level(args.underground_length)))
         else:
-            encode_solution = lambda solution, _: json.dumps(solution)
+            def encode_solution(solution, _):
+                return json.dumps(solution)
 
         if args.objective == 'length':
             get_next_size = store.next_length_size
         elif args.objective == 'area':
             get_next_size = store.next_area_size
-        
-        
+
         for store in sorted(stores, key=lambda store: store.network_name):
             if get_next_size(args.underground_length) is not None:
                 continue
@@ -203,12 +215,15 @@ if __name__ == '__main__':
             if args.objective == 'length':
                 (_, input_count), (_, output_count) = get_input_output_colours(store.network)
                 min_height = max(input_count, output_count)
-                loss = lambda size: size[0] if size[1] == min_height else float('inf')
+
+                def loss(size):
+                    return size[0] if size[1] == min_height else float('inf')
             elif args.objective == 'area':
-                loss = lambda size: (size[0]-2) * size[1]
+                def loss(size):
+                    return (size[0] - 2) * size[1]
             else:
                 assert False
-            
+
             solution = store.best_current_solution(loss, args.underground_length)
             if solution is None:
                 continue
@@ -224,7 +239,7 @@ if __name__ == '__main__':
                     next_size = store.next_area_size(args.underground_length)
                 else:
                     assert False
-                
+
                 if next_size is None:
                     break
                 print(f'{store.network_name}: Start {next_size}')
@@ -234,7 +249,7 @@ if __name__ == '__main__':
                 store.clean()
 
                 save_progress()
-            
+
             print(f'{store.network_name}: Solution found')
 
         async def main():
