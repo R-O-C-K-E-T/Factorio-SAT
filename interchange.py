@@ -1,7 +1,7 @@
 import argparse
 import json
-import sys
 
+import belt_balancer
 import optimisations
 from solver import Grid
 from template import EdgeMode
@@ -74,6 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('--alternating', action='store_true', help='Restrict output colours to an alternating pattern')
     parser.add_argument('--all', action='store_true', help='Generate all belt balancers')
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
+    parser.add_argument('--partial', type=argparse.FileType('r'), help='Partial interchange to base solution from')
     args = parser.parse_args()
 
     if args.height < 1:
@@ -128,7 +129,9 @@ if __name__ == '__main__':
     # for tile in grid.iterate_tiles():
     #     grid.clauses += implies(invert_components(tile.all_direction), set_all_false(tile.underground))
 
-    print(len(grid.clauses), file=sys.stderr)
+    if args.partial is not None:
+        with args.partial:
+            belt_balancer.set_nonempty_tiles(grid, args.partial.read())
 
     for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
         print(json.dumps(solution.tolist()))

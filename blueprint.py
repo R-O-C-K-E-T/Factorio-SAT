@@ -330,6 +330,21 @@ def write_tile_simple(tile):
     return item
 
 
+def convert_to_tiles(blueprint_or_json: str) -> np.ndarray:
+    try:
+        decoded_blueprint = decode_blueprint(blueprint_or_json)
+    except Exception:
+        try:
+            tiles = json.loads(blueprint_or_json)
+        except json.JSONDecodeError:
+            raise RuntimeError('Failed to decode string as either blueprint or json')
+        tiles = np.vectorize(read_tile)(tiles)
+    else:
+        tiles = import_blueprint(decoded_blueprint)
+
+    return tiles
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Encode/Decode blueprint strings')
     subparsers = parser.add_subparsers(dest='mode', required=True)

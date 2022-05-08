@@ -2,6 +2,7 @@ import argparse
 import json
 import math
 
+import belt_balancer
 import optimisations
 from cardinality import library_equals, quadratic_one
 from solver import Belt, Grid
@@ -90,12 +91,13 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Creates n to n belt balancers where n is a power of two. '
-                    'Note that the outputs of this program do not include the first row of splitters.')
+                    'Note that the outputs of this program do not include the first and last rows of splitters.')
     parser.add_argument('width', type=int, help='Belt balancer maximum width')
     parser.add_argument('size', type=int, help='Belt balancer size')
     parser.add_argument('--underground-length', type=int, default=4, help='Sets the maximum length of underground section (excludes ends)')
     parser.add_argument('--all', action='store_true', help='Generate all belt balancers')
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
+    parser.add_argument('--partial', type=argparse.FileType('r'), help='Partial balancer to base solution from')
     args = parser.parse_args()
 
     if args.underground_length == -1:
@@ -108,11 +110,15 @@ if __name__ == '__main__':
 
     grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
 
-    optimisations.expand_underground(grid, min_x=1, max_x=grid.width - 1)
+    optimisations.expand_underground(grid, min_x=1, max_x=grid.width - 2)
     optimisations.apply_generic_optimisations(grid)
 
     for i in range(int(math.log2(args.size)) - 2):
         grid.clauses += library_equals([tile.level_primary[i] for tile in grid.iterate_tiles()], args.size // 2, grid.pool)
+
+    if args.partial is not None:
+        with args.partial:
+            belt_balancer.set_nonempty_tiles(grid, args.partial.read())
 
     for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
         print(json.dumps(solution.tolist()))

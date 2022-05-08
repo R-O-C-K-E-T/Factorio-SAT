@@ -371,6 +371,7 @@ if __name__ == '__main__':
     parser.add_argument('--aligned', action='store_true', help='Enforces balancer input aligns with output')
     parser.add_argument('--all', action='store_true', help='Generate all belt balancers')
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
+    parser.add_argument('--partial', type=argparse.FileType('r'), help='Partial balancer to base solution from')
     args = parser.parse_args()
 
     if args.underground_length == -1:
@@ -392,6 +393,10 @@ if __name__ == '__main__':
     optimisations.expand_underground(grid, min_x=1, max_x=grid.width - 2)
     optimisations.apply_generic_optimisations(grid)
     belt_balancer.prevent_double_edge_belts(grid)
+
+    if args.partial is not None:
+        with args.partial:
+            belt_balancer.set_nonempty_tiles(grid, args.partial.read())
 
     for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
         print(json.dumps(solution.tolist()))

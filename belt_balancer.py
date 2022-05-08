@@ -3,8 +3,10 @@ import json
 from typing import Sequence
 
 from pysat.card import EncType
+import numpy as np
 
 import optimisations
+import blueprint
 from cardinality import library_atleast, library_equals, quadratic_one
 from network import deduplicate_network, get_input_output_colours, open_network
 from solver import Belt, Grid, TileTemplate
@@ -256,6 +258,12 @@ def prevent_double_edge_belts(grid: Grid):
             ])
 
 
+def set_nonempty_tiles(grid: Grid, blueprint_or_json: str):
+    tiles = blueprint.convert_to_tiles(blueprint_or_json)
+    for (row, col), tile in np.ndenumerate(tiles):
+        if tile is not None:
+            grid.set_tile(col, row, tile)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
     parser.add_argument('network', type=argparse.FileType('r'), help='Splitter network')
@@ -281,6 +289,8 @@ if __name__ == '__main__':
     parser.add_argument('--underground-length', type=int, default=4, help='Sets the maximum length of underground section (excludes ends)')
     parser.add_argument('--all', action='store_true', help='Generate all belt balancers')
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
+    parser.add_argument('--partial', type=argparse.FileType('r'), help='Partial balancer to base solution from')
+    
     args = parser.parse_args()
 
     if args.underground_length == -1:
@@ -340,6 +350,10 @@ if __name__ == '__main__':
         setup_balancer_ends_180(grid, network)
     else:
         setup_balancer_ends(grid, network, args.aligned, args.use_ends)
+
+    if args.partial is not None:
+        with args.partial:
+            set_nonempty_tiles(grid, args.partial.read())
 
     for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
         print(json.dumps(solution.tolist()))
