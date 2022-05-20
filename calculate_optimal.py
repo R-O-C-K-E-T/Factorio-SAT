@@ -172,17 +172,83 @@ def get_belt_level(underground_length: int):
     return belt_level  # If none work, then just use the biggest
 
 
+def export_crosstable(stores: List[NetworkSolutionStore], crosstable_filename: str):
+    belt_levels = [
+        (4, '\U0001f7e8'),
+        (6, '\U0001f7e5'),
+        (8, '\U0001f7e6'),
+    ]
+    impossible = '\u274c'
+    # unknown = '\u2753'
+    unknown = '\u2754'
+
+    preamble = ''
+    try:
+        with open(crosstable_filename, 'r') as f:
+            while True:
+                line = f.readline()
+                if len(line) == 0 or line.startswith('# Balancers'):
+                    break
+                preamble += line
+    except FileNotFoundError:
+        pass
+
+    with open(crosstable_filename, 'w') as f:
+        f.write(preamble)
+        f.write('# Balancers\n')
+
+        for store in sorted(stores, key=lambda store: store.ordering_key):
+            if len(store.exist) == 0:
+                continue
+            f.write(f'## {store.network_name}\n')
+            max_width = max(width for _, width, _ in store.exist) - 2
+            max_height = max(height for _, _, height in store.exist)
+            (_, input_count), (_, output_count) = get_input_output_colours(store.network)
+            min_height = max(input_count, output_count)
+
+            f.write('|     |' + ''.join(f' {i:<3} |' for i in range(1, max_width + 1)) + '\n')
+            f.write('|' + '-----|' * (max_width + 1) + '\n')
+
+            for height in range(min_height, max_height + 1):
+                f.write(f'| {height:<3} |')
+                for width in range(1, max_width + 1):
+                    is_known = False
+                    for underground_length, character in belt_levels:
+                        exists = store.does_balancer_exist((underground_length, width + 2, height))
+                        if exists:
+                            break
+                        if exists is False:
+                            is_known = True
+                    else:
+                        character = impossible if is_known else unknown
+
+                    f.write(f' {character:<3} |')
+                f.write('\n')
+            f.write('\n')
+
+
 if __name__ == '__main__':
     base_path = 'networks'
     result_file = 'optimal_balancers.json'
 
     parser = argparse.ArgumentParser(description='Calculates optimal balancers')
-    parser.add_argument('mode', choices=['query', 'compute'])
-    parser.add_argument('underground_length', type=int, help='Maximum underground length')
-    parser.add_argument('objective', choices=['area', 'length'], help='Optimisation objective')
-    parser.add_argument('--export-blueprints', action='store_true', help='Return query results as blueprints')
-    parser.add_argument('--threads', type=int, help='Number of compute threads')
-    parser.add_argument('--solver', type=str, default='g4', help='Backend SAT solver to use')
+
+    subparsers = parser.add_subparsers(dest='mode', required=True)
+    query_parser = subparsers.add_parser('query')
+    compute_parser = subparsers.add_parser('compute')
+    export_crosstable_parser = subparsers.add_parser('export-crosstable')
+
+    for subparser in (query_parser, compute_parser):
+        subparser.add_argument('underground_length', type=int, help='Maximum underground length')
+        subparser.add_argument('objective', choices=['area', 'length'], help='Optimisation objective')
+
+    query_parser.add_argument('--export-blueprints', action='store_true', help='Return query results as blueprints')
+    query_parser.add_argument('--allow-imperfect', action='store_true', help='Return balancers that are not known to be optimal')
+
+    compute_parser.add_argument('--threads', type=int, help='Number of compute threads')
+    compute_parser.add_argument('--solver', type=str, default='g4', help='Backend SAT solver to use')
+
+    export_crosstable_parser.add_argument('filename', type=str, help='Name of file to export crosstable markdown as')
     args = parser.parse_args()
 
     if 'objective' in args:
@@ -229,7 +295,7 @@ if __name__ == '__main__':
                 return json.dumps(solution)
 
         for store in sorted(stores, key=lambda store: store.ordering_key):
-            if args.objective.next_size(store, args.underground_length) is not None:
+            if not args.allow_imperfect and args.objective.next_size(store, args.underground_length) is not None:
                 continue
 
             solution = store.best_current_solution(args.objective.loss, args.underground_length)
@@ -260,5 +326,7 @@ if __name__ == '__main__':
 
         loop = asyncio.new_event_loop()
         loop.run_until_complete(main())
+    elif args.mode == 'export-crosstable':
+        export_crosstable(stores, args.filename)
     else:
         assert False
