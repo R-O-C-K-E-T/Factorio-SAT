@@ -4,6 +4,8 @@ import concurrent.futures
 import json
 import math
 import os
+import re
+from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, Tuple
 
 import numpy as np
 
@@ -20,7 +22,7 @@ MAXIMUM_UNDERGROUND_LENGTHS = {
 }
 
 
-def factors(value):
+def factors(value: int) -> Iterator[Tuple[int, int]]:
     for test in reversed(range(1, math.floor(math.sqrt(value)) + 1)):
         if value % test == 0:
             a = test
@@ -30,18 +32,7 @@ def factors(value):
                 yield b, a
 
 
-def get_offsets(height, input_size, output_size):
-    if input_size > output_size:
-        for start_offset, end_offset in get_offsets(height, output_size, input_size):
-            yield end_offset, start_offset
-        return
-
-    for end_offset in range(height - output_size + 1):
-        for i in range(output_size - input_size + 1):
-            yield i + end_offset, end_offset
-
-
-def solve_balancer(network, size, solver):
+def solve_balancer(network, size: Tuple[int, int, int], solver: str):
     maximum_underground_length, width, height = size
 
     network = deduplicate_network(network)
@@ -63,14 +54,22 @@ def solve_balancer(network, size, solver):
 
 
 class NetworkSolutionStore:
-    def __init__(self, network_path):
+    def __init__(self, network_path: str):
         self.network = open_network(network_path)
         self.network_name = os.path.split(network_path)[1]
 
-        self.exist = dict()
-        self.solutions = dict()
+        self.exist: Dict[Tuple[int, int, int], bool] = dict()
+        self.solutions: Dict[Tuple[int, int, int], Any] = dict()
 
-    def does_balancer_exist(self, size):
+    @property
+    def ordering_key(self):
+        match = re.match('(\\d+)[x-](\\d+)(.*)', self.network_name)
+        if match is not None:
+            return int(match.group(1)), int(match.group(2)), match.group(3)
+        else:
+            return float('inf'), float('inf'), self.network_name
+
+    def does_balancer_exist(self, size: Tuple[int, int, int]):
         for other_size, exist in self.exist.items():
             if exist:
                 if all(d1 >= d2 for d1, d2 in zip(size, other_size)):
@@ -106,23 +105,33 @@ class NetworkSolutionStore:
             'solutions': dict((','.join(map(str, key)), val) for key, val in self.solutions.items())
         }
 
-    def add_solution(self, size, solution):
+    def add_solution(self, size: Tuple[int, int, int], solution: Optional[Any]):
         self.exist[size] = solution is not None
         if solution is not None:
             self.solutions[size] = solution
 
-    def best_current_solution(self, loss, underground_length):
+    def best_current_solution(self, loss: Callable[[Tuple[int, int]], Any], underground_length: int):
         found_solutions = ((size, solution) for size, solution in self.solutions.items() if size[0] <= underground_length and loss(size[1:]) != float('inf'))
         return min(found_solutions, key=lambda v: loss(v[0][1:]), default=[None] * 2)[1]
 
-    def next_length_size(self, underground_length):
-        (_, input_count), (_, output_count) = get_input_output_colours(self.network)
+
+class OptimisationObjective(Protocol):
+    def next_size(self, store: NetworkSolutionStore, underground_length: int) -> Optional[Tuple[int, int, int]]:
+        ...
+
+    def loss(self, size: Tuple[int, int]) -> Any:
+        ...
+
+
+class LengthObjective(OptimisationObjective):
+    def next_size(self, store: NetworkSolutionStore, underground_length: int) -> Optional[Tuple[int, int, int]]:
+        (_, input_count), (_, output_count) = get_input_output_colours(store.network)
         height = max(input_count, output_count)
 
         width = 3
         while True:
             size = underground_length, width, height
-            existence = self.does_balancer_exist(size)
+            existence = store.does_balancer_exist(size)
             if existence:
                 return None
 
@@ -130,8 +139,13 @@ class NetworkSolutionStore:
                 return size
             width += 1
 
-    def next_area_size(self, underground_length):
-        (_, input_count), (_, output_count) = get_input_output_colours(self.network)
+    def loss(self, size: Tuple[int, int]) -> Tuple[int, int]:
+        return size[1], size[0]
+
+
+class AreaObjective(OptimisationObjective):
+    def next_size(self, store: NetworkSolutionStore, underground_length: int) -> Optional[Tuple[int, int, int]]:
+        (_, input_count), (_, output_count) = get_input_output_colours(store.network)
         min_height = max(input_count, output_count)
         area = min_height
         while True:
@@ -140,12 +154,15 @@ class NetworkSolutionStore:
                     continue
 
                 size = underground_length, width + 2, height
-                existence = self.does_balancer_exist(size)
+                existence = store.does_balancer_exist(size)
                 if existence:
                     return None
                 if existence is None:
                     return size
             area += 1
+
+    def loss(self, size: Tuple[int, int]) -> int:
+        return (size[0] - 2) * size[1]
 
 
 def get_belt_level(underground_length: int):
@@ -168,18 +185,26 @@ if __name__ == '__main__':
     parser.add_argument('--solver', type=str, default='g4', help='Backend SAT solver to use')
     args = parser.parse_args()
 
-    stores = []
+    if 'objective' in args:
+        if args.objective == 'area':
+            args.objective = AreaObjective()
+        elif args.objective == 'length':
+            args.objective = LengthObjective()
+        else:
+            assert False
+
+    stores: List[NetworkSolutionStore] = []
     for file in os.listdir(base_path):
         stores.append(NetworkSolutionStore(os.path.join(base_path, file)))
 
     try:
         with open(result_file) as f:
             data = json.load(f)
-            for store in stores:
-                item = data.get(store.network_name)
-                if item is None:
-                    continue
-                store.from_json(item)
+        for store in stores:
+            item = data.get(store.network_name)
+            if item is None:
+                continue
+            store.from_json(item)
     except FileNotFoundError:
         pass
 
@@ -203,43 +228,19 @@ if __name__ == '__main__':
             def encode_solution(solution, _):
                 return json.dumps(solution)
 
-        if args.objective == 'length':
-            get_next_size = store.next_length_size
-        elif args.objective == 'area':
-            get_next_size = store.next_area_size
-
-        for store in sorted(stores, key=lambda store: store.network_name):
-            if get_next_size(args.underground_length) is not None:
+        for store in sorted(stores, key=lambda store: store.ordering_key):
+            if args.objective.next_size(store, args.underground_length) is not None:
                 continue
 
-            if args.objective == 'length':
-                (_, input_count), (_, output_count) = get_input_output_colours(store.network)
-                min_height = max(input_count, output_count)
-
-                def loss(size):
-                    return size[0] if size[1] == min_height else float('inf')
-            elif args.objective == 'area':
-                def loss(size):
-                    return (size[0] - 2) * size[1]
-            else:
-                assert False
-
-            solution = store.best_current_solution(loss, args.underground_length)
+            solution = store.best_current_solution(args.objective.loss, args.underground_length)
             if solution is None:
                 continue
 
             print(encode_solution(solution, store.network_name))
     elif args.mode == 'compute':
-        async def optimise(executor, store):
-            next_size = None
+        async def optimise(executor: concurrent.futures.ProcessPoolExecutor, store: NetworkSolutionStore):
             while True:
-                if args.objective == 'length':
-                    next_size = store.next_length_size(args.underground_length)
-                elif args.objective == 'area':
-                    next_size = store.next_area_size(args.underground_length)
-                else:
-                    assert False
-
+                next_size = args.objective.next_size(store, args.underground_length)
                 if next_size is None:
                     break
                 print(f'{store.network_name}: Start {next_size}')
