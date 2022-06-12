@@ -1,5 +1,6 @@
 import collections
 import enum
+import functools
 import inspect
 import io
 import shlex
@@ -14,6 +15,7 @@ from pysat.formula import CNF, IDPool
 from pysat.solvers import Solver
 
 from ipasir import IPASIRLibrary
+from tile import BaseTile
 from util import ClauseList, LiteralType, read_number
 
 
@@ -370,10 +372,12 @@ class BaseGrid(Generic[InstanceType, ParsedType]):
 
         return self.get_tile_instance(*pos)
 
+    def parse_cell(self, mapping: Dict[int, bool], tile: InstanceType) -> ParsedType:
+        return self.template.parse(tile, mapping)
+
     def parse_solution(self, solution: List[LiteralType]) -> np.ndarray:
-        mapping = collections.defaultdict(lambda: 0)
-        mapping.update({abs(lit): lit > 0 for lit in solution})
-        return np.frompyfunc(lambda tile: self.template.parse(tile, mapping), 1, 1)(self.tiles)
+        mapping = {abs(lit): lit > 0 for lit in solution}
+        return np.frompyfunc(functools.partial(self.parse_cell, mapping), 1, 1)(self.tiles)
 
     def check(self, solver: str = 'g3'):
         return self.solve(solver) is not None
@@ -420,6 +424,22 @@ class BaseGrid(Generic[InstanceType, ParsedType]):
     def write(self, filename: str, comments: Optional[List[str]] = None):
         cnf = CNF(from_clauses=self.clauses)
         cnf.to_file(filename, comments)
+
+
+ParsedTileType = TypeVar('ParsedTileType', bound=dict)
+
+
+class FactorioGrid(BaseGrid[InstanceType, ParsedTileType]):
+    def set_tile(self, tile: BaseTile):
+        raise NotImplementedError
+
+    def read_tile(self, cell: ParsedTileType) -> BaseTile:
+        raise NotImplementedError
+
+    def parse_cell(self, mapping: Dict[int, bool], tile: InstanceType) -> ParsedType:
+        cell = super().parse_cell(mapping, tile)
+        cell['tile'] = self.read_tile(cell).write()
+        return cell
 
 
 __all__ = [

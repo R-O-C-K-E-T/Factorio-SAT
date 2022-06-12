@@ -1,3 +1,4 @@
+from typing import Any, Dict, Optional, Tuple
 import argparse
 import base64
 import copy
@@ -6,11 +7,10 @@ import json
 import math
 import struct
 import zlib
-from typing import Any, Optional, Tuple
 
 import numpy as np
 
-from tile import AssemblingMachine, Belt, Inserter, Splitter, UndergroundBelt
+from tile import AssemblingMachine, BaseTile, Belt, BeltConnectedTile, EmptyTile, Inserter, Splitter, UndergroundBelt
 from util import direction_to_vec
 
 
@@ -65,55 +65,52 @@ BLUEPRINT_TEMPLATE = {'blueprint': {'icons': [{'signal': {'type': 'item', 'name'
 def make_blueprint(tiles, label: Optional[str] = None, level: TransportBeltLevel = TransportBeltLevel.NORMAL):
     entities = []
     entity_number = 1
-    for y in range(tiles.shape[0]):
-        for x in range(tiles.shape[1]):
-            tile = tiles[y, x]
-            if tile is None:
+    for (y, x), tile in np.ndenumerate(tiles):
+        if isinstance(tile, EmptyTile):
+            continue
+
+        entity = {'entity_number': entity_number, 'position': {'x': x + 0.5, 'y': y + 0.5}}
+        if isinstance(tile, Belt):
+            entity['name'] = level.belt_variant
+
+            direction = direction_to_factorio_direction(tile.output_direction)
+            if direction != 0:
+                entity['direction'] = direction
+        elif isinstance(tile, UndergroundBelt):
+            entity['name'] = level.underground_variant
+
+            direction = direction_to_factorio_direction(tile.direction)
+            if direction != 0:
+                entity['direction'] = direction
+
+            entity['type'] = 'input' if tile.is_input else 'output'
+        elif isinstance(tile, Splitter):
+            if not tile.is_head:
                 continue
+            entity['name'] = level.splitter_variant
 
-            entity = {'entity_number': entity_number, 'position': {'x': x + 0.5, 'y': y + 0.5}}
-            if isinstance(tile, Belt):
-                entity['name'] = level.belt_variant
+            direction = direction_to_factorio_direction(tile.direction)
+            if direction != 0:
+                entity['direction'] = direction
 
-                direction = direction_to_factorio_direction(tile.output_direction)
-                if direction != 0:
-                    entity['direction'] = direction
-            elif isinstance(tile, UndergroundBelt):
-                entity['name'] = level.underground_variant
+            dx, dy = direction_to_vec((tile.direction + 1) % 4)
+            entity['position']['x'] += dx / 2
+            entity['position']['y'] += dy / 2
+        elif isinstance(tile, Inserter):
+            # invert direction
 
-                direction = direction_to_factorio_direction(tile.direction)
-                if direction != 0:
-                    entity['direction'] = direction
+            if tile.type == 0:  # Normal
+                entity['name'] = 'inserter'
+            elif tile.type == 1:  # Long
+                entity['name'] = 'long-handed-inserter'
 
-                entity['type'] = 'input' if tile.is_input else 'output'
-            elif isinstance(tile, Splitter):
-                if not tile.is_head:
-                    continue
-                entity['name'] = level.splitter_variant
-
-                direction = direction_to_factorio_direction(tile.direction)
-                if direction != 0:
-                    entity['direction'] = direction
-
-                dx, dy = direction_to_vec((tile.direction + 1) % 4)
-                entity['position']['x'] += dx / 2
-                entity['position']['y'] += dy / 2
-            elif isinstance(tile, Inserter):
-                # invert direction
-
-                if tile.type == 0:  # Normal
-                    entity['name'] = 'inserter'
-                elif tile.type == 1:  # Long
-                    entity['name'] = 'long-handed-inserter'
-
-                direction = direction_to_factorio_direction((tile.direction - 2) % 4)
-                if direction != 0:
-                    entity['direction'] = direction
-            else:
-                print(tile)
-                assert False
-            entities.append(entity)
-            entity_number += 1
+            direction = direction_to_factorio_direction((tile.direction - 2) % 4)
+            if direction != 0:
+                entity['direction'] = direction
+        else:
+            raise RuntimeError(f'Unencodable tile: {tile}')
+        entities.append(entity)
+        entity_number += 1
 
     result = copy.deepcopy(BLUEPRINT_TEMPLATE)
     if label is not None:
@@ -122,51 +119,42 @@ def make_blueprint(tiles, label: Optional[str] = None, level: TransportBeltLevel
     return result
 
 
-class TempBelt:
-    def __init__(self, direction):
-        self.output_direction = direction
-
-
 def resolve_belt_input_directions(tiles):
-    for y in range(tiles.shape[0]):
-        for x in range(tiles.shape[1]):
-            tile = tiles[y, x]
-            if tile is None:
+    for (y, x), tile in np.ndenumerate(tiles):
+        if not isinstance(tile, Belt):
+            continue
+
+        input_direction = None
+        for direction in range(4):
+            dx, dy = direction_to_vec(direction)
+
+            x1 = x - dx
+            y1 = y - dy
+            if x1 < 0 or x1 >= tiles.shape[1] or y1 < 0 or y1 >= tiles.shape[0]:
                 continue
-            if not isinstance(tile, TempBelt):
+
+            neighbour = tiles[y1, x1]
+            if not isinstance(neighbour, BeltConnectedTile):
                 continue
 
-            input_direction = None
-            for direction in range(4):
-                dx, dy = direction_to_vec(direction)
-
-                x1 = x - dx
-                y1 = y - dy
-                if x1 < 0 or x1 >= tiles.shape[1] or y1 < 0 or y1 >= tiles.shape[0]:
-                    continue
-
-                neighbour = tiles[y1, x1]
-                if neighbour is None:
-                    continue
-
-                if neighbour.output_direction != direction:
-                    continue
-
-                if input_direction is None:
-                    input_direction = direction
-                else:
-                    input_direction = None
-                    break
+            if neighbour.output_direction != direction:
+                continue
 
             if input_direction is None:
-                input_direction = tile.output_direction
+                input_direction = direction
+            else:
+                input_direction = None
+                break
 
-            tiles[y, x] = Belt(input_direction, tile.output_direction)
+        if input_direction is None:
+            input_direction = tile.output_direction
+
+        tiles[y, x] = Belt(input_direction, tile.output_direction)
 
 
 def import_blueprint(data: Any):
     if len(data['blueprint']['entities']) == 0:
-        return np.full((0, 0), None)
+        return np.full((0, 0), EmptyTile())
 
     entities = {}
 
@@ -183,7 +171,7 @@ def import_blueprint(data: Any):
             entities[math.floor(x - dx / 2), math.floor(y - dy / 2)] = Splitter(direction, True)
             entities[math.floor(x + dx / 2), math.floor(y + dy / 2)] = Splitter(direction, False)
         elif any(name == level.belt_variant for level in TransportBeltLevel):
-            entities[floor_pos] = TempBelt(direction)
+            entities[floor_pos] = Belt(direction, direction)
         elif any(name == level.underground_variant for level in TransportBeltLevel):
             entities[floor_pos] = UndergroundBelt(direction, entity['type'] == 'input')
         elif name in ('burner-inserter', 'inserter', 'fast-inserter', 'filter-inserter', 'stack-inserter', 'stack-filter-inserter'):
@@ -210,7 +198,7 @@ def import_blueprint(data: Any):
     width = max(x for x, _ in entities) + 1
     height = max(y for _, y in entities) + 1
 
-    tiles = np.full((height, width), None)
+    tiles = np.full((height, width), EmptyTile())
     for pos, entity in entities.items():
         tiles[pos[::-1]] = entity
     del entities
@@ -219,12 +207,15 @@ def import_blueprint(data: Any):
     return tiles
 
 
-def read_tile(item):
+def read_tile(item) -> BaseTile:
+    if 'tile' in item:
+        return BaseTile.read(item['tile'])
+
     input_direction = item['input_direction']
     output_direction = item['output_direction']
     if 'is_empty' in item:
         if item['is_empty']:
-            tile = None
+            tile = EmptyTile()
         elif item['is_belt']:
             if input_direction is None:
                 input_direction = item['colour_direction']
@@ -257,7 +248,7 @@ def read_tile(item):
                 assert direction is not None
             tile = Splitter(direction, item['is_splitter_head'])
         elif input_direction is None and output_direction is None:
-            tile = None
+            tile = EmptyTile()
         elif input_direction is None or output_direction is None:
             direction = input_direction
             if direction is None:
@@ -269,65 +260,8 @@ def read_tile(item):
     return tile
 
 
-def write_tile_flow(tile):
-    item = {
-        'is_empty': False,
-        'is_belt': False,
-        'is_underground_in': False,
-        'is_underground_out': False,
-        'is_splitter': None,
-        'is_inserter': None,
-        'is_assembling_machine': False,
-        'assembling_x': None,
-        'assembling_y': None,
-        'alt_direction': None,
-    }
-    if tile is None:
-        item['is_empty'] = True
-    elif isinstance(tile, Inserter):
-        item['is_inserter'] = tile.type
-        item['alt_direction'] = tile.direction
-    elif isinstance(tile, Splitter):
-        item['is_splitter'] = int(not tile.is_head)
-        item['alt_direction'] = tile.direction
-    elif isinstance(tile, UndergroundBelt):
-        if tile.is_input:
-            item['is_underground_in'] = True
-        else:
-            item['is_underground_out'] = True
-    elif isinstance(tile, Belt):
-        item['is_belt'] = True
-    elif isinstance(tile, AssemblingMachine):
-        item['is_assembling_machine'] = True
-        item['assembling_x'] = tile.x
-        item['assembling_y'] = tile.y
-    else:
-        assert False
-
-    if tile is None:
-        item['input_direction'] = None
-        item['output_direction'] = None
-    else:
-        item['input_direction'] = tile.input_direction
-        item['output_direction'] = tile.output_direction
-    return item
-
-
-def write_tile_simple(tile):
-    item = {'is_splitter': False, 'is_splitter_head': False}
-    if tile is None:
-        item['input_direction'] = None
-        item['output_direction'] = None
-    else:
-        if isinstance(tile, Inserter):
-            raise RuntimeError('Unsupported entity {} for format "simple"'.format(tile))
-
-        if isinstance(tile, Splitter):
-            item['is_splitter'] = True
-            item['is_splitter_head'] = tile.is_head
-        item['input_direction'] = tile.input_direction
-        item['output_direction'] = tile.output_direction
-    return item
+def write_tile(tile: BaseTile) -> Dict[str, Any]:
+    return {'tile': tile.write()}
 
 
 def convert_to_tiles(blueprint_or_json: str) -> np.ndarray:
@@ -354,35 +288,19 @@ if __name__ == '__main__':
     encode_parser.add_argument('--level', choices=[level.name.lower() for level in TransportBeltLevel], default='normal', help='Belt technology level to use')
 
     decode_parser = subparsers.add_parser('decode', help='Convert blueprint to solver output format')
-    # decode_parser.add_argument('format', choices=['simple', 'flow'], help='Format to encode to')
 
     args = parser.parse_args()
 
     if args.mode == 'encode':
         while True:
             tiles = np.array(json.loads(input()))
-            for y, row in enumerate(tiles):
-                for x, entry in enumerate(row):
-                    tiles[y, x] = read_tile(entry)
-
+            tiles = np.vectorize(read_tile)(tiles)
             print(encode_blueprint(make_blueprint(tiles, args.label, TransportBeltLevel[args.level.upper()])))
 
     elif args.mode == 'decode':
         while True:
             decoded = decode_blueprint(input())
-            tiles = import_blueprint(decoded)
-
-            # if args.format == 'simple':
-            #     writer = write_tile_simple
-            # elif args.format == 'flow':
-            #     writer = write_tile_flow
-            # else:
-            #     assert False
-            writer = write_tile_simple
-
-            for y, row in enumerate(tiles):
-                for x, tile in enumerate(row):
-                    tiles[y, x] = writer(tile)
+            tiles = np.vectorize(write_tile)(import_blueprint(decoded))
             print(json.dumps(tiles.tolist()))
     else:
         assert False

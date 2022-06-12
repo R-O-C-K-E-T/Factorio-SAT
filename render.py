@@ -14,7 +14,7 @@ from OpenGL.GLU import *
 from pygame.locals import *
 
 import blueprint
-from tile import AssemblingMachine, BaseTile, Inserter
+from tile import AssemblingMachine, BaseTile, EmptyTile, Inserter
 import tilemaps
 from solver import Belt, Splitter, UndergroundBelt
 from util import *
@@ -261,7 +261,7 @@ def render_solution(solution, animation: int, colouring=True, colour_count: Opti
                 item = solution[y, x]
 
                 tile = blueprint.read_tile(item)
-                if tile is None:
+                if isinstance(tile, EmptyTile):
                     continue
 
                 colour = item.get('colour', 0)

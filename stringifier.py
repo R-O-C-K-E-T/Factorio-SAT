@@ -4,8 +4,8 @@ import sys
 
 import numpy as np
 
-from blueprint import read_tile, write_tile_simple
-from tile import Belt, Splitter, UndergroundBelt
+from blueprint import read_tile, write_tile
+from tile import Belt, EmptyTile, Splitter, UndergroundBelt
 
 
 def raw_print(data):
@@ -48,7 +48,7 @@ def style_seq(fg=None, bg=None, bold=False, underlined=False):
 
 
 MAPPING = {
-    None: ' ',
+    EmptyTile(): ' ',
     Belt(0, 0): '→',
     Belt(1, 1): '↑',
     Belt(2, 2): '←',
@@ -134,10 +134,7 @@ if __name__ == '__main__':
     if args.mode == 'encode':
         while True:
             tiles = np.array(json.loads(input()))
-            for y, row in enumerate(tiles):
-                for x, entry in enumerate(row):
-                    tiles[y, x] = read_tile(entry)
-
+            tiles = np.vectorize(read_tile)(tiles)
             print(encode(tiles))
     else:
         while True:
@@ -146,8 +143,5 @@ if __name__ == '__main__':
                 lines.append(input().strip())
                 if lines[-1].endswith(END_STOP):
                     break
-            grid = decode(lines)
-            for y, row in enumerate(grid):
-                for x, tile in enumerate(row):
-                    grid[y, x] = write_tile_simple(tile)
+            grid = np.vectorize(write_tile)(decode(lines))
             print(json.dumps(grid.tolist()))

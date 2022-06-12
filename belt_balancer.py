@@ -11,6 +11,7 @@ from cardinality import library_atleast, library_equals, quadratic_one
 from network import deduplicate_network, get_input_output_colours, open_network
 from solver import Belt, Grid, TileTemplate
 from template import EdgeMode, OneHotTemplate
+from tile import EmptyTile
 from util import *
 
 
@@ -20,24 +21,24 @@ def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offse
     assert start_offset + input_count <= grid.height and end_offset + output_count <= grid.height
 
     for y in range(start_offset):
-        grid.set_tile(0, y, None)
+        grid.set_tile(0, y, EmptyTile())
 
     for y in range(start_offset, start_offset + input_count):
         grid.set_tile(0, y, Belt(0, 0))
         grid.set_colour(grid.width-1, y, input_colour)
 
     for y in range(start_offset+input_count, grid.height):
-        grid.set_tile(0, y, None)
+        grid.set_tile(0, y, EmptyTile())
 
     for y in range(end_offset):
-        grid.set_tile(grid.width-1, y, None)
+        grid.set_tile(grid.width-1, y, EmptyTile())
 
     for y in range(end_offset, end_offset + output_count):
         grid.set_tile(grid.width-1, y, Belt(0, 0))
         grid.set_colour(grid.width-1, y, output_colour)
 
     for y in range(end_offset+output_count, grid.height):
-        grid.set_tile(grid.width-1, y, None)
+        grid.set_tile(grid.width-1, y, EmptyTile())
 
 
 def setup_balancer_end(grid: Grid, tiles: Sequence[TileTemplate], colour: int, direction: int, count: int, rest_empty: bool = True):

@@ -1,125 +1,203 @@
+from typing import Any, ClassVar, Dict, Optional
+from dataclasses import dataclass
+
+TILE_TYPES = {}
+
+
 class BaseTile:
-    def __init__(self, input_direction=None, output_direction=None):
-        self.input_direction = input_direction
-        self.output_direction = output_direction
+    type_key: ClassVar[str]
+
+    def __init_subclass__(cls, /, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if hasattr(cls, 'type_key'):
+            if cls.type_key in TILE_TYPES:
+                raise RuntimeError(f'Duplicate tile type key: {repr(cls.type_key)}')
+            TILE_TYPES[cls.type_key] = cls
+
+    def write(self) -> Dict[str, Any]:
+        return {'type': self.type_key}
+
+    @staticmethod
+    def read(json_dict: Dict[str, Any]) -> 'BaseTile':
+        return TILE_TYPES[json_dict['type']].read(json_dict)
 
 
-class Belt(BaseTile):
-    def __init__(self, input_direction: int, output_direction: int):
-        assert (input_direction - output_direction) % 4 != 2
-        super().__init__(input_direction, output_direction)
+class TransformableTile(BaseTile):
+    def rotate_90(self) -> 'TransformableTile':
+        raise NotImplementedError
 
-    def __eq__(self, other):
-        if self is other:
-            return True
-        if not isinstance(other, Belt):
-            return False
+    def flip_x(self) -> 'TransformableTile':
+        raise NotImplementedError
 
-        return self.input_direction == other.input_direction and self.output_direction == other.output_direction
+    def rotate_180(self) -> 'TransformableTile':
+        return self.rotate_90().rotate_90()
 
-    def __hash__(self):
-        return hash((self.input_direction, self.output_direction))
+    def rotate_270(self) -> 'TransformableTile':
+        return self.rotate_180().rotate_90()
 
-    def __str__(self):
-        return 'Belt({}, {})'.format(self.input_direction, self.output_direction)
-    __repr__ = __str__
+    def flip_y(self) -> 'TransformableTile':
+        return self.rotate_90().flip_x().rotate_270()
 
 
-class UndergroundBelt(BaseTile):
-    def __init__(self, direction: int, is_input: bool):
-        self.direction = direction
-        self.is_input = is_input
+@dataclass(frozen=True)
+class EmptyTile(BaseTile):
+    type_key: ClassVar[str] = 'empty'
 
-        if is_input:
-            super().__init__(direction, None)
-        else:
-            super().__init__(None, direction)
-
-    def __eq__(self, other):
-        if self is other:
-            return True
-        if not isinstance(other, UndergroundBelt):
-            return False
-
-        return self.direction == other.direction and self.is_input == other.is_input
-
-    def __hash__(self):
-        return hash((self.direction, self.is_input))
-
-    def __str__(self):
-        return 'UndergroundBelt({}, {})'.format(self.direction, self.is_input)
-    __repr__ = __str__
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]):
+        return cls()
 
 
-class Splitter(BaseTile):
-    def __init__(self, direction: int, is_head: bool):
-        self.direction = direction
-        self.is_head = is_head
-
-        super().__init__(direction, direction)
-
-    def __eq__(self, other):
-        if self is other:
-            return True
-        if not isinstance(other, Splitter):
-            return False
-
-        return self.direction == other.direction and self.is_head == other.is_head
-
-    def __hash__(self):
-        return hash((self.direction, self.is_head))
-
-    def __str__(self):
-        return 'Splitter({}, {})'.format(self.direction, self.is_head)
-    __repr__ = __str__
+class BeltConnectedTile(BaseTile):
+    input_direction: Optional[int]
+    output_direction: Optional[int]
 
 
-class Inserter(BaseTile):
-    def __init__(self, direction: int, type: int):
-        self.direction = direction
-        self.type = type  # 0 -> Normal, 1 -> Long
-
-        super().__init__()
-
-    def __eq__(self, other):
-        if self is other:
-            return True
-        if not isinstance(other, Inserter):
-            return False
-
-        return self.direction == other.direction and self.type == other.type
-
-    def __hash__(self):
-        return hash((self.direction, self.type))
-
-    def __str__(self):
-        return 'Inserter({}, {})'.format(self.direction, self.type)
-    __repr__ = __str__
+def flip_x_direction(direction: int):
+    if direction % 2 == 0:
+        return 2 - direction
+    else:
+        return direction
 
 
+@dataclass(frozen=True)
+class Belt(BeltConnectedTile, TransformableTile):
+    type_key: ClassVar[str] = 'belt'
+
+    input_direction: int
+    output_direction: int
+
+    def flip_x(self) -> 'Belt':
+        return type(self)(flip_x_direction(self.input_direction), flip_x_direction(self.output_direction))
+
+    def rotate_90(self) -> 'Belt':
+        return type(self)((self.input_direction + 1) % 4, (self.output_direction + 1) % 4)
+
+    def __post_init__(self):
+        if (self.input_direction - self.output_direction) % 4 == 2:
+            raise RuntimeError(f'Cannot input and output from same side ({self.input_direction}, {self.output_direction})')
+
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'input_direction': self.input_direction,
+            'output_direction': self.output_direction,
+        }
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]):
+        return cls(json_dict['input_direction'], json_dict['output_direction'])
+
+
+@dataclass(frozen=True)
+class UndergroundBelt(BeltConnectedTile, TransformableTile):
+    type_key: ClassVar[str] = 'underground_belt'
+
+    direction: int
+    is_input: bool
+
+    @property
+    def input_direction(self) -> Optional[int]:
+        return self.direction if self.is_input else None
+
+    @property
+    def output_direction(self) -> Optional[int]:
+        return None if self.is_input else self.direction
+
+    def flip_x(self) -> 'UndergroundBelt':
+        return type(self)(flip_x_direction(self.direction), self.is_input)
+
+    def rotate_90(self) -> 'UndergroundBelt':
+        return type(self)((self.direction + 1) % 4, self.is_input)
+
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'direction': self.direction,
+            'is_input': self.is_input,
+        }
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]):
+        return cls(json_dict['direction'], json_dict['is_input'])
+
+
+@dataclass(frozen=True)
+class Splitter(BeltConnectedTile, TransformableTile):
+    type_key: ClassVar[str] = 'splitter'
+
+    direction: int
+    is_head: bool
+
+    @property
+    def input_direction(self) -> int:
+        return self.direction
+
+    @property
+    def output_direction(self) -> int:
+        return self.direction
+
+    def flip_x(self) -> 'Splitter':
+        return type(self)(flip_x_direction(self.direction), not self.is_head)
+
+    def rotate_90(self) -> 'Splitter':
+        return type(self)((self.direction + 1) % 4, self.is_head)
+
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'direction': self.direction,
+            'is_head': self.is_head,
+        }
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]):
+        return cls(json_dict['direction'], json_dict['is_head'])
+
+
+@dataclass(frozen=True)
+class Inserter(TransformableTile):
+    type_key: ClassVar[str] = 'inserter'
+
+    direction: int
+    type: int  # 0 -> Normal, 1 -> Long
+
+    def flip_x(self) -> 'Inserter':
+        return type(self)(flip_x_direction(self.direction), self.type)
+
+    def rotate_90(self) -> 'Inserter':
+        return type(self)((self.direction + 1) % 4, self.type)
+
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'direction': self.direction,
+            'insert_type': self.type,
+        }
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]):
+        return cls(json_dict['direction'], json_dict['insert_type'])
+
+
+@dataclass(frozen=True)
 class AssemblingMachine(BaseTile):
-    def __init__(self, x: int, y: int):
-        self.x = x
-        self.y = y
-        super().__init__()
+    type_key: ClassVar[str] = 'assembling_machine'
 
-    def __eq__(self, other):
-        if self is other:
-            return True
-        if not isinstance(other, AssemblingMachine):
-            return False
+    x: int
+    y: int
 
-        return self.x == other.x and self.y == other.y
+    def __post_init__(self):
+        assert 0 <= self.x < 3
+        assert 0 <= self.y < 3
 
-    def __hash__(self):
-        return hash((self.x, self.y))
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'x': self.x,
+            'y': self.y,
+        }
 
-    def __str__(self):
-        return 'AssemblingMachine({}, {})'.format(self.x, self.y)
-    __repr__ = __str__
-
-
-BELT_TILES = [Belt(direction, (direction + curve) % 4) for direction in range(4) for curve in range(-1, 2)]
-UNDERGROUND_TILES = [UndergroundBelt(direction, type) for direction in range(4) for type in range(2)]
-SPLITTER_TILES = [Splitter(direction, i) for direction in range(4) for i in range(2)]
-ALL_TILES = [None] + BELT_TILES + UNDERGROUND_TILES + SPLITTER_TILES
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]):
+        return cls(json_dict['x'], json_dict['y'])

@@ -4,7 +4,8 @@ from pysat.formula import IDPool
 
 from cardinality import quadratic_amo
 from template import *
-from tile import BaseTile, Belt, Splitter, UndergroundBelt
+from template import FactorioGrid
+from tile import BaseTile, Belt, EmptyTile, Splitter, UndergroundBelt
 from util import *
 
 
@@ -20,7 +21,7 @@ class TileTemplate(Protocol):
     colour_uy: List[LiteralType]
 
 
-class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
+class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
     def __init__(self, width: int, height: int, colours: Optional[int], underground_length: int = 4, extras: CompositeTemplateParams = {}, pool: Optional[IDPool] = None):
         assert colours is None or colours >= 1
         assert underground_length >= 0
@@ -107,10 +108,10 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
                     self.clauses += implies([side[inv_direction], tile_a.is_splitter, -tile_a.is_splitter_head],
                                             [[tile_b.input_direction[inv_direction], tile_b.output_direction[inv_direction]]])
 
-    def set_tile(self, x: int, y: int, tile: Optional[BaseTile]):
+    def set_tile(self, x: int, y: int, tile: BaseTile):
         tile_instance = self.get_tile_instance(x, y)
 
-        if tile is None:
+        if isinstance(tile, EmptyTile):
             self.clauses += set_all_false(tile_instance.all_direction)
         elif isinstance(tile, Splitter):
             self.clauses.append([tile_instance.is_splitter])
@@ -128,7 +129,27 @@ class Grid(BaseGrid[TileTemplate, Dict[str, Any]]):
             else:
                 self.clauses += [[tile_instance.output_direction[tile.output_direction]]]
         else:
-            assert False
+            raise RuntimeError(f'Unsupported tile type {tile}')
+
+    def read_tile(self, cell: Dict[str, Any]) -> BaseTile:
+        input_direction = cell['input_direction']
+        output_direction = cell['output_direction']
+        if cell['is_splitter']:
+            direction = input_direction
+            if direction is None:
+                direction = output_direction
+                assert direction is not None
+            return Splitter(direction, cell['is_splitter_head'])
+        elif input_direction is None and output_direction is None:
+            return EmptyTile()
+        elif input_direction is None or output_direction is None:
+            direction = input_direction
+            if direction is None:
+                direction = output_direction
+                assert direction is not None
+            return UndergroundBelt(direction, output_direction is None)
+        else:
+            return Belt(input_direction, output_direction)
 
     def prevent_colour(self, colour: int):
         for x in range(self.width):
