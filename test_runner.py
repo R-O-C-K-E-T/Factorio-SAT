@@ -174,7 +174,7 @@ def tokenise(lines: List[str]) -> List[Token]:
 
 
 def open_suite(filename: str):
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding='utf-8') as f:
         lines = [line.strip() for line in f.readlines()]
 
     tokens = tokenise(lines)
