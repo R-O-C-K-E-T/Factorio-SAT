@@ -4,6 +4,7 @@ from typing import Sequence
 
 from pysat.card import EncType
 import numpy as np
+from direction import Direction
 
 import optimisations
 import blueprint
@@ -12,7 +13,7 @@ from network import deduplicate_network, get_input_output_colours, open_network
 from solver import Belt, Grid, TileTemplate
 from template import EdgeMode, OneHotTemplate
 from tile import EmptyTile
-from util import *
+from util import implies, invert_components, literals_different, set_all_false, set_number, set_numbers
 
 
 def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offset: int):
@@ -24,21 +25,21 @@ def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offse
         grid.set_tile(0, y, EmptyTile())
 
     for y in range(start_offset, start_offset + input_count):
-        grid.set_tile(0, y, Belt(0, 0))
-        grid.set_colour(grid.width-1, y, input_colour)
+        grid.set_tile(0, y, Belt(Direction.RIGHT, Direction.RIGHT))
+        grid.set_colour(grid.width - 1, y, input_colour)
 
-    for y in range(start_offset+input_count, grid.height):
+    for y in range(start_offset + input_count, grid.height):
         grid.set_tile(0, y, EmptyTile())
 
     for y in range(end_offset):
-        grid.set_tile(grid.width-1, y, EmptyTile())
+        grid.set_tile(grid.width - 1, y, EmptyTile())
 
     for y in range(end_offset, end_offset + output_count):
-        grid.set_tile(grid.width-1, y, Belt(0, 0))
-        grid.set_colour(grid.width-1, y, output_colour)
+        grid.set_tile(grid.width - 1, y, Belt(Direction.RIGHT, Direction.RIGHT))
+        grid.set_colour(grid.width - 1, y, output_colour)
 
-    for y in range(end_offset+output_count, grid.height):
-        grid.set_tile(grid.width-1, y, EmptyTile())
+    for y in range(end_offset + output_count, grid.height):
+        grid.set_tile(grid.width - 1, y, EmptyTile())
 
 
 def setup_balancer_end(grid: Grid, tiles: Sequence[TileTemplate], colour: int, direction: int, count: int, rest_empty: bool = True):
@@ -132,9 +133,7 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
     for x in range(grid.width):
         for y in range(grid.height):
             tile = grid.get_tile_instance(x, y)
-            #grid.clauses += heule_one([-tile.is_splitter_head, *tile.node], grid.allocate_variable)
             grid.clauses += quadratic_one([-tile.is_splitter_head, *tile.node])
-            #grid.clauses += library_equals([-tile.is_splitter_head, *tile.node], 1, grid.pool)
 
     for i, (input_colours, output_colours) in enumerate(network):
         assert sum(colour is None for colour in input_colours + output_colours) <= 1
@@ -142,18 +141,15 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
         for x in range(grid.width):
             for y in range(grid.height):
                 tile00 = grid.get_tile_instance(x, y)
-
-                #grid.clauses.append([tile00.is_splitter_head, -tile00.node[i]])
-
                 if any(colour is None for colour in input_colours):
                     assert not any(colour is None for colour in output_colours)
                     grid.clauses.append([-tile00.node[i], *tile00.output_direction])
                 else:
                     grid.clauses.append([-tile00.node[i], *tile00.input_direction])
 
-                for direction in range(4):
-                    dx0, dy0 = direction_to_vec(direction)
-                    dx1, dy1 = direction_to_vec((direction + 1) % 4)
+                for direction in Direction:
+                    dx0, dy0 = direction.vec
+                    dx1, dy1 = direction.next.vec
 
                     precondition = [
                         tile00.node[i],
@@ -265,6 +261,7 @@ def set_nonempty_tiles(grid: Grid, blueprint_or_json: str):
         if tile is not None:
             grid.set_tile(col, row, tile)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
     parser.add_argument('network', type=argparse.FileType('r'), help='Splitter network')
@@ -277,7 +274,8 @@ if __name__ == '__main__':
     parser.add_argument('--edge-belts', action='store_true',
                         help='Prevents two side by side belts at the inputs/outputs of a balancer (weaker version of --edge-splitters)')
     parser.add_argument('--glue-splitters', action='store_true',
-                        help='Prevents a configuration where a splitter has two straight input belts. Effectively pushing all splitters as far back as possible')
+                        help='Prevents a configuration where a splitter has two straight input belts.'
+                        ' Effectively pushing all splitters as far back as possible')
     parser.add_argument('--expand-underground', action='store_true', help='Ensures that underground belts are expanded if possible')
     parser.add_argument('--prevent-mergeable-underground', action='store_true', help='Prevent underground segments that can be merged')
     parser.add_argument('--prevent-bad-patterns', action='store_true',
@@ -291,7 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--all', action='store_true', help='Generate all belt balancers')
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
     parser.add_argument('--partial', type=argparse.FileType('r'), help='Partial balancer to base solution from')
-    
+
     args = parser.parse_args()
 
     if args.underground_length == -1:
@@ -329,7 +327,7 @@ if __name__ == '__main__':
         optimisations.glue_splitters(grid)
         optimisations.glue_partial_splitters(grid, EdgeMode.NO_WRAP)
     if args.expand_underground or args.fast:
-        optimisations.expand_underground(grid, min_x=1, max_x=grid.width-2)
+        optimisations.expand_underground(grid, min_x=1, max_x=grid.width - 2)
     if args.prevent_mergeable_underground or args.fast:
         optimisations.prevent_mergeable_underground(grid, EdgeMode.NO_WRAP)
     if args.break_symmetry:

@@ -1,12 +1,13 @@
-from typing import *
+from typing import Callable, List, Dict, Any, Optional, Protocol, Tuple, Union
 
 from pysat.formula import IDPool
 
 from cardinality import quadratic_amo
-from template import *
-from template import FactorioGrid
+from direction import Axis, Direction
+from template import (ArrayTemplate, BoolTemplate, CompositeTemplate, CompositeTemplateParams, EdgeMode,
+                      EdgeModeType, FactorioGrid, NestedArray, NumberTemplate, OneHotTemplate, flatten)
 from tile import BaseTile, Belt, EmptyTile, Splitter, UndergroundBelt
-from util import *
+from util import LiteralType, implies, invert_components, literals_same, set_all_false, set_literal, set_maximum, set_not_number, set_number, set_numbers_equal
 
 
 class TileTemplate(Protocol):
@@ -22,7 +23,13 @@ class TileTemplate(Protocol):
 
 
 class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
-    def __init__(self, width: int, height: int, colours: Optional[int], underground_length: int = 4, extras: CompositeTemplateParams = {}, pool: Optional[IDPool] = None):
+    def __init__(self,
+                 width: int,
+                 height: int,
+                 colours: Optional[int],
+                 underground_length: int = 4,
+                 extras: CompositeTemplateParams = {},
+                 pool: Optional[IDPool] = None):
         assert colours is None or colours >= 1
         assert underground_length >= 0
         self.colours = colours
@@ -37,7 +44,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
             'underground': ArrayTemplate(BoolTemplate(), (4,)),
         }
         if colours is not None:
-            self.colour_bits = bin_length(colours)
+            self.colour_bits = (colours - 1).bit_length()
             template.update({
                 'colour': NumberTemplate(self.colour_bits),
                 'colour_ux': NumberTemplate(self.colour_bits),
@@ -64,7 +71,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
             self.clauses.append([-tile.is_splitter_head, tile.is_splitter])
 
             # Splitters must output the same side as their input or have no output
-            for direction in range(4):
+            for direction in Direction:
                 output = tile.output_direction.copy()
                 del output[direction]
 
@@ -74,21 +81,21 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                 del input[direction]
                 self.clauses += implies([tile.is_splitter, tile.output_direction[direction]], set_all_false(input))
 
-            for direction in range(4):
+            for direction in Direction:
                 # Cannot input from same side as output
-                self.clauses += quadratic_amo([tile.input_direction[direction], tile.output_direction[(direction + 2) % 4]])
+                self.clauses += quadratic_amo([tile.input_direction[direction], tile.output_direction[direction.reverse]])
 
                 # Cannot have a turn and be a splitter
-                self.clauses += implies([tile.is_splitter, tile.input_direction[direction]], [[-tile.output_direction[(direction + 1) % 4]]])
+                self.clauses += implies([tile.is_splitter, tile.input_direction[direction]], [[-tile.output_direction[direction.next]]])
 
             # Prevent colours beyond end of range
             if self.colours is not None:
                 for colour_range in (tile.colour, tile.colour_ux, tile.colour_uy):
                     self.clauses += set_maximum(self.colours - 1, colour_range)
 
-        for direction in range(4):
-            inv_direction = (direction + 2) % 4
-            for tile_a, tile_b in self.iterate_tile_lines(direction_to_vec((direction + 1) % 4), 2, EdgeMode.NO_WRAP):
+        for direction in Direction:
+            inv_direction = direction.reverse
+            for tile_a, tile_b in self.iterate_tile_lines(direction.next.vec, 2, EdgeMode.NO_WRAP):
                 if tile_b is None:  # Prevent splitter overlapping edge of grid
                     self.clauses += [
                         [-tile_a.input_direction[direction],      -tile_a.is_splitter, -tile_a.is_splitter_head],
@@ -134,6 +141,11 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
     def read_tile(self, cell: Dict[str, Any]) -> BaseTile:
         input_direction = cell['input_direction']
         output_direction = cell['output_direction']
+        if input_direction is not None:
+            input_direction = Direction(input_direction)
+        if output_direction is not None:
+            output_direction = Direction(output_direction)
+
         if cell['is_splitter']:
             direction = input_direction
             if direction is None:
@@ -165,9 +177,13 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
         tile = self.get_tile_instance(x, y)
         self.clauses += set_number(colour, tile.colour)
 
-    def transport_quantity(self, quantity: Callable[[TileTemplate], NestedArray[LiteralType]], quantity_ux: Callable[[TileTemplate], NestedArray[LiteralType]], quantity_uy: Callable[[TileTemplate], NestedArray[LiteralType]], edge_mode: EdgeModeType):
-        for direction in range(4):
-            dx, dy = direction_to_vec(direction)
+    def transport_quantity(self,
+                           quantity: Callable[[TileTemplate], NestedArray[LiteralType]],
+                           quantity_ux: Callable[[TileTemplate], NestedArray[LiteralType]],
+                           quantity_uy: Callable[[TileTemplate], NestedArray[LiteralType]],
+                           edge_mode: EdgeModeType):
+        for direction in Direction:
+            dx, dy = direction.vec
             for x in range(self.width):
                 for y in range(self.height):
                     tile_a = self.get_tile_instance(x, y)
@@ -179,7 +195,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                     quantity_a = flatten(quantity(tile_a))
                     quantity_b = flatten(quantity(tile_b))
 
-                    if direction % 2 == 0:
+                    if direction.axis == Axis.HORIZONTAL:
                         quantity_ua = flatten(quantity_ux(tile_a))
                         quantity_ub = flatten(quantity_ux(tile_b))
                     else:
@@ -193,10 +209,20 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                     self.clauses += implies([tile_a.underground[direction]], set_numbers_equal(quantity_ua, quantity_ub))
 
                     # Underground transition consistent
-                    self.clauses += implies([tile_a.input_direction[direction], -tile_a.is_splitter, *
-                                            invert_components(tile_a.output_direction)], set_numbers_equal(quantity_a, quantity_ub))
-                    self.clauses += implies([tile_b.output_direction[direction], -tile_b.is_splitter, *
-                                            invert_components(tile_b.input_direction)], set_numbers_equal(quantity_ua, quantity_b))
+                    self.clauses += implies(
+                        [
+                            tile_a.input_direction[direction],
+                            -tile_a.is_splitter,
+                            *invert_components(tile_a.output_direction)
+                        ],
+                        set_numbers_equal(quantity_a, quantity_ub))
+                    self.clauses += implies(
+                        [
+                            tile_b.output_direction[direction],
+                            -tile_b.is_splitter,
+                            *invert_components(tile_b.input_direction)
+                        ],
+                        set_numbers_equal(quantity_ua, quantity_b))
 
     def prevent_bad_colouring(self, edge_mode: EdgeModeType):
         if self.colours == 1:
@@ -265,10 +291,10 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                 self.clauses.append([-tile.output_direction[1], *tile.input_direction])
 
     def prevent_bad_undergrounding(self, edge_mode: EdgeModeType):
-        for direction in range(4):
-            reverse_dir = (direction + 2) % 4
+        for direction in Direction:
+            reverse_dir = direction.reverse
 
-            dx, dy = direction_to_vec(direction)
+            dx, dy = direction.vec
             for x in range(self.width):
                 for y in range(self.height):
                     tile_a = self.get_tile_instance(x, y)
@@ -312,7 +338,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                             [tile_a.underground[direction], -tile_b.underground[direction]],
                             [
                                 [tile_b.output_direction[direction]],
-                                *([-tile_b.input_direction[i]] for i in range(4)),
+                                *([-tile_b.input_direction[d]] for d in Direction),
                                 [-tile_b.is_splitter],
                             ]
                         )
@@ -323,7 +349,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                             [tile_a.underground[direction], -tile_b.underground[direction]],
                             [
                                 [tile_b.input_direction[direction]],
-                                *([-tile_b.output_direction[i]] for i in range(4)),
+                                *([-tile_b.output_direction[d]] for d in Direction),
                                 [-tile_b.is_splitter],
                             ]
                         )
@@ -334,8 +360,8 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
         if self.underground_length == float('inf'):
             return
 
-        for direction in range(4):
-            dx, dy = direction_to_vec(direction)
+        for direction in Direction:
+            dx, dy = direction.vec
             for x in range(self.width):
                 for y in range(self.height):
                     clause = []
@@ -350,8 +376,8 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                         self.clauses.append(clause)
 
     def prevent_intersection(self, edge_mode: EdgeModeType):
-        for direction in range(4):
-            for tile_a, tile_b in self.iterate_tile_lines(direction_to_vec(direction), 2, edge_mode):
+        for direction in Direction:
+            for tile_a, tile_b in self.iterate_tile_lines(direction.vec, 2, edge_mode):
                 if tile_b is None:
                     continue
 
@@ -359,14 +385,14 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
 
                 # Handles special splitter output case
                 self.clauses += implies([tile_a.input_direction[direction], tile_a.is_splitter, -tile_b.is_splitter], [
-                    [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[(direction + 1) % 4]],
-                    [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[(direction - 1) % 4]],
+                    [-tile_b.input_direction[direction.next], -tile_b.output_direction[direction.next]],
+                    [-tile_b.input_direction[direction.prev], -tile_b.output_direction[direction.prev]],
 
-                    [-tile_b.input_direction[(direction + 1) % 4], -tile_b.output_direction[direction]],
-                    [-tile_b.input_direction[(direction - 1) % 4], -tile_b.output_direction[direction]],
+                    [-tile_b.input_direction[direction.next], -tile_b.output_direction[direction]],
+                    [-tile_b.input_direction[direction.prev], -tile_b.output_direction[direction]],
 
-                    [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction + 1) % 4]],
-                    [-tile_b.input_direction[(direction + 2) % 4], -tile_b.output_direction[(direction - 1) % 4]],
+                    [-tile_b.input_direction[direction.reverse], -tile_b.output_direction[direction.next]],
+                    [-tile_b.input_direction[direction.reverse], -tile_b.output_direction[direction.prev]],
                 ])
 
     def itersolve(self, important_variables=set(), solver='g3', ignore_colour=False):

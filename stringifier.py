@@ -5,6 +5,7 @@ import sys
 import numpy as np
 
 from blueprint import read_tile, write_tile
+from direction import Direction
 from tile import Belt, EmptyTile, Splitter, UndergroundBelt
 
 
@@ -49,38 +50,38 @@ def style_seq(fg=None, bg=None, bold=False, underlined=False):
 
 MAPPING = {
     EmptyTile(): ' ',
-    Belt(0, 0): '→',
-    Belt(1, 1): '↑',
-    Belt(2, 2): '←',
-    Belt(3, 3): '↓',
+    Belt(Direction.RIGHT, Direction.RIGHT): '→',
+    Belt(Direction.UP, Direction.UP): '↑',
+    Belt(Direction.LEFT, Direction.LEFT): '←',
+    Belt(Direction.DOWN, Direction.DOWN): '↓',
 
-    Belt(0, 1): 'h',  # '\u2b0f',
-    Belt(1, 2): 't',  # '\u21b0',
-    Belt(2, 3): 'H',  # '\u2b10',
-    Belt(3, 0): 'T',  # '\u21b3',
+    Belt(Direction.RIGHT, Direction.UP): 'h',  # '\u2b0f',
+    Belt(Direction.UP, Direction.LEFT): 't',  # '\u21b0',
+    Belt(Direction.LEFT, Direction.DOWN): 'H',  # '\u2b10',
+    Belt(Direction.DOWN, Direction.RIGHT): 'T',  # '\u21b3',
 
-    Belt(0, 3): 'f',  # '\u2b0e',
-    Belt(3, 2): 'g',  # '\u21b2',
-    Belt(2, 1): 'F',  # '\u2b11',
-    Belt(1, 0): 'G',  # '\u21b1',
+    Belt(Direction.RIGHT, Direction.DOWN): 'f',  # '\u2b0e',
+    Belt(Direction.DOWN, Direction.LEFT): 'g',  # '\u21b2',
+    Belt(Direction.LEFT, Direction.UP): 'F',  # '\u2b11',
+    Belt(Direction.UP, Direction.RIGHT): 'G',  # '\u21b1',
 
-    UndergroundBelt(0,  True): 'l',  # '⇥',
-    UndergroundBelt(0, False): 'L',  # '↦',
-    UndergroundBelt(1,  True): 'i',  # '⤒',
-    UndergroundBelt(1, False): 'I',  # '↥',
-    UndergroundBelt(2,  True): 'j',  # '⇤',
-    UndergroundBelt(2, False): 'J',  # '↤',
-    UndergroundBelt(3,  True): 'k',  # '⤓',
-    UndergroundBelt(3, False): 'K',  # '↧',
+    UndergroundBelt(Direction.RIGHT,  True): 'l',  # '⇥',
+    UndergroundBelt(Direction.RIGHT, False): 'L',  # '↦',
+    UndergroundBelt(Direction.UP,  True): 'i',  # '⤒',
+    UndergroundBelt(Direction.UP, False): 'I',  # '↥',
+    UndergroundBelt(Direction.LEFT,  True): 'j',  # '⇤',
+    UndergroundBelt(Direction.LEFT, False): 'J',  # '↤',
+    UndergroundBelt(Direction.DOWN,  True): 'k',  # '⤓',
+    UndergroundBelt(Direction.DOWN, False): 'K',  # '↧',
 
-    Splitter(0,  True): 'd',  # '⥟',
-    Splitter(0, False): 'D',  # '⥛',
-    Splitter(1,  True): 'w',  # '⥜',
-    Splitter(1, False): 'W',  # '⥠',
-    Splitter(2,  True): 'a',  # '⥚',
-    Splitter(2, False): 'A',  # '⥞',
-    Splitter(3,  True): 's',  # '⥡',
-    Splitter(3, False): 'S',  # '⥝',
+    Splitter(Direction.RIGHT,  True): 'd',  # '⥟',
+    Splitter(Direction.RIGHT, False): 'D',  # '⥛',
+    Splitter(Direction.UP,  True): 'w',  # '⥜',
+    Splitter(Direction.UP, False): 'W',  # '⥠',
+    Splitter(Direction.LEFT,  True): 'a',  # '⥚',
+    Splitter(Direction.LEFT, False): 'A',  # '⥞',
+    Splitter(Direction.DOWN,  True): 's',  # '⥡',
+    Splitter(Direction.DOWN, False): 'S',  # '⥝',
 }
 
 INV_MAPPING = dict((val, key) for key, val in MAPPING.items())

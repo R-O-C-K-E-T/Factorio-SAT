@@ -2,18 +2,19 @@ import argparse
 import json
 
 import belt_balancer
+from direction import Direction
 import optimisations
 from solver import Grid
 from template import EdgeMode
-from util import direction_to_vec, invert_components, set_literal, set_number, set_numbers
+from util import invert_components, set_literal, set_number, set_numbers
 
 
 def prevent_passing(grid: Grid):
     assert len(grid.get_tile_instance(0, 0).colour) == 1
 
-    for direction in range(4):
-        inv_direction = (direction + 2) % 4
-        for block in grid.iterate_tile_blocks(direction_to_vec(direction), 2, direction_to_vec((direction + 1) % 4), 2, EdgeMode.NO_WRAP):
+    for direction in Direction:
+        inv_direction = direction.reverse
+        for block in grid.iterate_tile_blocks(direction.vec, 2, direction.next.vec, 2, EdgeMode.NO_WRAP):
             if (block == None).any():
                 continue
 
@@ -37,10 +38,10 @@ def prevent_passing(grid: Grid):
 
 
 def prevent_awkward_underground_entry(grid: Grid):
-    for direction in range(4):
-        inv_direction = (direction + 2) % 4
-        across_direction = (direction + 1) % 4
-        for block in grid.iterate_tile_blocks(direction_to_vec(across_direction), 3, direction_to_vec(direction), 3, EdgeMode.NO_WRAP):
+    for direction in Direction:
+        inv_direction = direction.reverse
+        across_direction = direction.next
+        for block in grid.iterate_tile_blocks(across_direction.vec, 3, direction.vec, 3, EdgeMode.NO_WRAP):
             block[0, 1:3] = None  # Unimportant tiles
 
             if (block == None).any():

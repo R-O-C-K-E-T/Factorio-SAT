@@ -9,9 +9,9 @@ import struct
 import zlib
 
 import numpy as np
+from direction import Direction
 
 from tile import AssemblingMachine, BaseTile, Belt, BeltConnectedTile, EmptyTile, Inserter, Splitter, UndergroundBelt
-from util import direction_to_vec
 
 
 class TransportBeltLevel(enum.Enum):
@@ -51,14 +51,6 @@ def encode_blueprint(data) -> str:
     return '0' + string
 
 
-def direction_to_factorio_direction(direction: int):
-    return ((1 - direction) % 4) * 2
-
-
-def direction_from_factorio_direction(direction: int):
-    return (1 - (direction // 2)) % 4
-
-
 BLUEPRINT_TEMPLATE = {'blueprint': {'icons': [{'signal': {'type': 'item', 'name': 'splitter'}, 'index': 1}], 'item': 'blueprint', 'version': 281474976710656}}
 
 
@@ -73,13 +65,13 @@ def make_blueprint(tiles, label: Optional[str] = None, level: TransportBeltLevel
         if isinstance(tile, Belt):
             entity['name'] = level.belt_variant
 
-            direction = direction_to_factorio_direction(tile.output_direction)
+            direction = tile.output_direction.factorio_direction
             if direction != 0:
                 entity['direction'] = direction
         elif isinstance(tile, UndergroundBelt):
             entity['name'] = level.underground_variant
 
-            direction = direction_to_factorio_direction(tile.direction)
+            direction = tile.direction.factorio_direction
             if direction != 0:
                 entity['direction'] = direction
 
@@ -89,11 +81,11 @@ def make_blueprint(tiles, label: Optional[str] = None, level: TransportBeltLevel
                 continue
             entity['name'] = level.splitter_variant
 
-            direction = direction_to_factorio_direction(tile.direction)
+            direction = tile.direction.factorio_direction
             if direction != 0:
                 entity['direction'] = direction
 
-            dx, dy = direction_to_vec((tile.direction + 1) % 4)
+            dx, dy = tile.direction.next.vec
             entity['position']['x'] += dx / 2
             entity['position']['y'] += dy / 2
         elif isinstance(tile, Inserter):
@@ -104,7 +96,7 @@ def make_blueprint(tiles, label: Optional[str] = None, level: TransportBeltLevel
             elif tile.type == 1:  # Long
                 entity['name'] = 'long-handed-inserter'
 
-            direction = direction_to_factorio_direction((tile.direction - 2) % 4)
+            direction = tile.direction.reverse.factorio_direction
             if direction != 0:
                 entity['direction'] = direction
         else:
@@ -125,11 +117,9 @@ def resolve_belt_input_directions(tiles):
             continue
 
         input_direction = None
-        for direction in range(4):
-            dx, dy = direction_to_vec(direction)
-
-            x1 = x - dx
-            y1 = y - dy
+        for direction in Direction:
+            x1 = x - direction.dx
+            y1 = y - direction.dy
             if x1 < 0 or x1 >= tiles.shape[1] or y1 < 0 or y1 >= tiles.shape[0]:
                 continue
 
@@ -161,12 +151,12 @@ def import_blueprint(data: Any):
     for entity in data['blueprint']['entities']:
         pos = entity['position']['x'], entity['position']['y']
         name = entity['name']
-        direction = direction_from_factorio_direction(entity.get('direction', 0))
+        direction = Direction.from_factorio(entity.get('direction', 0))
 
         floor_pos = math.floor(pos[0]), math.floor(pos[1])
 
         if any(name == level.splitter_variant for level in TransportBeltLevel):
-            dx, dy = direction_to_vec((direction + 1) % 4)
+            dx, dy = direction.next.vec
             x, y = pos
             entities[math.floor(x - dx / 2), math.floor(y - dy / 2)] = Splitter(direction, True)
             entities[math.floor(x + dx / 2), math.floor(y + dy / 2)] = Splitter(direction, False)
@@ -175,9 +165,9 @@ def import_blueprint(data: Any):
         elif any(name == level.underground_variant for level in TransportBeltLevel):
             entities[floor_pos] = UndergroundBelt(direction, entity['type'] == 'input')
         elif name in ('burner-inserter', 'inserter', 'fast-inserter', 'filter-inserter', 'stack-inserter', 'stack-filter-inserter'):
-            entities[floor_pos] = Inserter((direction + 2) % 4, 0)
+            entities[floor_pos] = Inserter(direction.reverse, 0)
         elif name == 'long-handed-inserter':
-            entities[floor_pos] = Inserter((direction + 2) % 4, 1)
+            entities[floor_pos] = Inserter(direction.reverse, 1)
         elif name.startswith('assembling-machine-'):
             x0 = floor_pos[0] - 1
             y0 = floor_pos[1] - 1

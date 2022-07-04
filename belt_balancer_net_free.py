@@ -5,11 +5,12 @@ import sys
 import warnings
 
 import belt_balancer
+from direction import Direction
 import optimisations
 from cardinality import quadratic_amo, quadratic_one
 from solver import Grid
 from template import ArrayTemplate, BoolTemplate, EdgeMode, NumberTemplate, flatten
-from util import add_numbers, direction_to_vec, implies, literals_same, make_fixed_allocator, set_all_false, set_maximum, set_number, set_numbers_equal
+from util import add_numbers, implies, literals_same, make_fixed_allocator, set_all_false, set_maximum, set_number, set_numbers_equal
 
 
 def lcm(*args):
@@ -60,9 +61,9 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
     for x in range(grid.width):
         for y in range(grid.height):
             tile00 = grid.get_tile_instance(x, y)
-            for direction in range(4):
-                dx0, dy0 = direction_to_vec(direction)
-                dx1, dy1 = direction_to_vec((direction + 1) % 4)
+            for direction in Direction:
+                dx0, dy0 = direction.vec
+                dx1, dy1 = direction.next.vec
 
                 precondition = [
                     tile00.is_splitter_head,
@@ -165,9 +166,9 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
     for x in range(grid.width):
         for y in range(grid.height):
             tile00 = grid.get_tile_instance(x, y)
-            for direction in range(4):
-                dx0, dy0 = direction_to_vec(direction)
-                dx1, dy1 = direction_to_vec((direction + 1) % 4)
+            for direction in Direction:
+                dx0, dy0 = direction.vec
+                dx1, dy1 = direction.next.vec
 
                 tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.NO_WRAP)
                 tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.NO_WRAP)

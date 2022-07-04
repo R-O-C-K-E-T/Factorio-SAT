@@ -3,11 +3,12 @@ import json
 import math
 
 import belt_balancer
+from direction import Direction
 import optimisations
 from cardinality import library_equals, quadratic_one
 from solver import Belt, Grid
 from template import EdgeMode, OneHotTemplate
-from util import direction_to_vec, implies, invert_components, is_power_of_two, literals_different, set_all_false, set_numbers_equal
+from util import implies, invert_components, is_power_of_two, literals_different, set_all_false, set_numbers_equal
 
 
 def create_balancer(width: int, height: int, underground_length: int) -> Grid:
@@ -39,9 +40,9 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
             for i in range(levels):
                 grid.clauses += implies([tile00.level[i]], library_equals(tile00.colour, 2**i, grid.pool))
 
-            for direction in range(4):
-                dx0, dy0 = direction_to_vec(direction)
-                dx1, dy1 = direction_to_vec((direction + 1) % 4)
+            for direction in Direction:
+                dx0, dy0 = direction.vec
+                dx1, dy1 = direction.next.vec
 
                 precondition = [
                     tile00.is_splitter_head,
@@ -73,11 +74,11 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
                 grid.clauses += implies(precondition, set_numbers_equal(tile00.level, tile01.level))
 
     for y in range(height):
-        grid.set_tile(0, y, Belt(0, 0))
+        grid.set_tile(0, y, Belt(Direction.RIGHT, Direction.RIGHT))
         grid.set_colour(0, y, 2**(y // 2))
 
     for y in range(height):
-        grid.set_tile(grid.width - 1, y, Belt(0, 0))
+        grid.set_tile(grid.width - 1, y, Belt(Direction.RIGHT, Direction.RIGHT))
 
     for y in range(0, height, 2):
         tile_a = grid.get_tile_instance(grid.width - 1, y)

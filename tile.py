@@ -1,6 +1,8 @@
 from typing import Any, ClassVar, Dict, Optional
 from dataclasses import dataclass
 
+from direction import Axis, Direction
+
 TILE_TYPES = {}
 
 
@@ -49,135 +51,132 @@ class EmptyTile(BaseTile):
 
 
 class BeltConnectedTile(BaseTile):
-    input_direction: Optional[int]
-    output_direction: Optional[int]
+    input_direction: Optional[Direction]
+    output_direction: Optional[Direction]
 
 
-def flip_x_direction(direction: int):
-    if direction % 2 == 0:
-        return 2 - direction
-    else:
-        return direction
+def flip_x_direction(direction: Direction):
+    return direction.reverse if direction.axis == Axis.HORIZONTAL else direction
 
 
 @dataclass(frozen=True)
 class Belt(BeltConnectedTile, TransformableTile):
     type_key: ClassVar[str] = 'belt'
 
-    input_direction: int
-    output_direction: int
+    input_direction: Direction
+    output_direction: Direction
 
     def flip_x(self) -> 'Belt':
         return type(self)(flip_x_direction(self.input_direction), flip_x_direction(self.output_direction))
 
     def rotate_90(self) -> 'Belt':
-        return type(self)((self.input_direction + 1) % 4, (self.output_direction + 1) % 4)
+        return type(self)(self.input_direction.next, self.output_direction.next)
 
     def __post_init__(self):
-        if (self.input_direction - self.output_direction) % 4 == 2:
+        if self.input_direction.reverse == self.output_direction:
             raise RuntimeError(f'Cannot input and output from same side ({self.input_direction}, {self.output_direction})')
 
     def write(self) -> Dict[str, Any]:
         return {
             **super().write(),
-            'input_direction': self.input_direction,
-            'output_direction': self.output_direction,
+            'input_direction': int(self.input_direction),
+            'output_direction': int(self.output_direction),
         }
 
     @classmethod
     def read(cls, json_dict: Dict[str, Any]):
-        return cls(json_dict['input_direction'], json_dict['output_direction'])
+        return cls(Direction(json_dict['input_direction']), Direction(json_dict['output_direction']))
 
 
 @dataclass(frozen=True)
 class UndergroundBelt(BeltConnectedTile, TransformableTile):
     type_key: ClassVar[str] = 'underground_belt'
 
-    direction: int
+    direction: Direction
     is_input: bool
 
     @property
-    def input_direction(self) -> Optional[int]:
+    def input_direction(self) -> Optional[Direction]:
         return self.direction if self.is_input else None
 
     @property
-    def output_direction(self) -> Optional[int]:
+    def output_direction(self) -> Optional[Direction]:
         return None if self.is_input else self.direction
 
     def flip_x(self) -> 'UndergroundBelt':
         return type(self)(flip_x_direction(self.direction), self.is_input)
 
     def rotate_90(self) -> 'UndergroundBelt':
-        return type(self)((self.direction + 1) % 4, self.is_input)
+        return type(self)(self.direction.next, self.is_input)
 
     def write(self) -> Dict[str, Any]:
         return {
             **super().write(),
-            'direction': self.direction,
+            'direction': int(self.direction),
             'is_input': self.is_input,
         }
 
     @classmethod
     def read(cls, json_dict: Dict[str, Any]):
-        return cls(json_dict['direction'], json_dict['is_input'])
+        return cls(Direction(json_dict['direction']), json_dict['is_input'])
 
 
 @dataclass(frozen=True)
 class Splitter(BeltConnectedTile, TransformableTile):
     type_key: ClassVar[str] = 'splitter'
 
-    direction: int
+    direction: Direction
     is_head: bool
 
     @property
-    def input_direction(self) -> int:
+    def input_direction(self) -> Direction:
         return self.direction
 
     @property
-    def output_direction(self) -> int:
+    def output_direction(self) -> Direction:
         return self.direction
 
     def flip_x(self) -> 'Splitter':
         return type(self)(flip_x_direction(self.direction), not self.is_head)
 
     def rotate_90(self) -> 'Splitter':
-        return type(self)((self.direction + 1) % 4, self.is_head)
+        return type(self)(self.direction.next, self.is_head)
 
     def write(self) -> Dict[str, Any]:
         return {
             **super().write(),
-            'direction': self.direction,
+            'direction': int(self.direction),
             'is_head': self.is_head,
         }
 
     @classmethod
     def read(cls, json_dict: Dict[str, Any]):
-        return cls(json_dict['direction'], json_dict['is_head'])
+        return cls(Direction(json_dict['direction']), json_dict['is_head'])
 
 
 @dataclass(frozen=True)
 class Inserter(TransformableTile):
     type_key: ClassVar[str] = 'inserter'
 
-    direction: int
+    direction: Direction
     type: int  # 0 -> Normal, 1 -> Long
 
     def flip_x(self) -> 'Inserter':
         return type(self)(flip_x_direction(self.direction), self.type)
 
     def rotate_90(self) -> 'Inserter':
-        return type(self)((self.direction + 1) % 4, self.type)
+        return type(self)(self.direction.next, self.type)
 
     def write(self) -> Dict[str, Any]:
         return {
             **super().write(),
-            'direction': self.direction,
+            'direction': int(self.direction),
             'insert_type': self.type,
         }
 
     @classmethod
     def read(cls, json_dict: Dict[str, Any]):
-        return cls(json_dict['direction'], json_dict['insert_type'])
+        return cls(Direction(json_dict['direction']), json_dict['insert_type'])
 
 
 @dataclass(frozen=True)

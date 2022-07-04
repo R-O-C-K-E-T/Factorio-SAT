@@ -9,8 +9,8 @@ from typing import Tuple
 import numpy as np
 from pysat.solvers import Solver
 
-from tile import Belt, Splitter, UndergroundBelt
-from util import bin_length, direction_to_vec, get_popcount, read_number, set_not_number
+from tile import Belt, EmptyTile, Splitter, UndergroundBelt
+from util import bin_length, get_popcount, read_number, set_not_number
 
 try:
     from graphviz import Digraph
@@ -511,17 +511,16 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
             if is_forward:
                 direction = tile.output_direction
             else:
-                direction = (tile.input_direction + 2) % 4
+                direction = tile.input_direction.reverse
 
-            dx, dy = direction_to_vec(direction)
             x, y = pos
-            return x + dx, y + dy
+            return x + direction.dx, y + direction.dy
         elif isinstance(tile, Splitter):
             assert False
         elif isinstance(tile, UndergroundBelt):
             if tile.is_input:
                 if is_forward:
-                    dx, dy = direction_to_vec(tile.direction)
+                    dx, dy = tile.direction.vec
                     while True:
                         pos = pos[0] + dx, pos[1] + dy
                         assert pos[0] >= 0 and pos[0] < tiles.shape[0] and pos[1] >= 0 and pos[1] < tiles.shape[1]
@@ -533,16 +532,16 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
                             break
                     return pos
                 else:
-                    dx, dy = direction_to_vec(tile.input_direction)
+                    dx, dy = tile.input_direction.vec
                     x, y = pos
                     return x - dx, y - dy
             else:
                 if is_forward:
-                    dx, dy = direction_to_vec(tile.output_direction)
+                    dx, dy = tile.output_direction.vec
                     x, y = pos
                     return x + dx, y + dy
                 else:
-                    dx, dy = direction_to_vec(tile.direction)
+                    dx, dy = tile.direction.vec
                     while True:
                         pos = pos[0] - dx, pos[1] - dy
                         assert pos[0] >= 0 and pos[0] < tiles.shape[0] and pos[1] >= 1 and pos[1] < tiles.shape[1]
@@ -554,15 +553,14 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
                             break
                     return pos
         else:
-            print(tile)
-            assert False
+            raise RuntimeError(f'Unknown tile type: {tile}')
 
-    def trace(colour, pos, is_forward):
+    def trace(colour: int, pos: Tuple[int, int], is_forward: bool):
         if pos[0] < 0 or pos[0] >= tiles.shape[0] or pos[1] < 0 or pos[1] >= tiles.shape[1]:
             return
 
         tile = tiles[pos]
-        if tile is None:
+        if tile == EmptyTile():
             return
 
         if isinstance(tile, Splitter):
@@ -584,7 +582,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
             if colour_mapping[x, y] is not None:
                 continue
 
-            if tile is None:
+            if tile == EmptyTile():
                 colour_mapping[x, y] = -1
                 continue
 
@@ -600,8 +598,8 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
     for x, y in splitters:
         tile = tiles[x, y]
         assert isinstance(tile, Splitter) and tile.is_head
-        dx0, dy0 = direction_to_vec(tile.direction)
-        dx1, dy1 = direction_to_vec((tile.direction + 1) % 4)
+        dx0, dy0 = tile.direction.vec
+        dx1, dy1 = tile.direction.next.vec
 
         node = []
         for is_output, offset_a in enumerate([(-dx0, -dy0), (+dx0, +dy0)]):

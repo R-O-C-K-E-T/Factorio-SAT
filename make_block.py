@@ -1,11 +1,12 @@
 import argparse
 import json
 import sys
+from direction import Axis, Direction
 
 import optimisations
 import solver
 from template import EdgeMode, EdgeModeType
-from util import *
+from util import implies, increment_number, invert_components, set_all_false, set_number, set_numbers_equal
 
 
 def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
@@ -18,15 +19,15 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
             else:
                 grid.clauses.append(tile_a.colour)
 
-            for direction in range(4):
-                dx, dy = direction_to_vec(direction)
+            for direction in Direction:
+                dx, dy = direction.vec
                 tile_b = grid.get_tile_instance_offset(x, y, dx, dy, edge_mode)
                 x1, y1 = x + dx, y + dy
 
                 if tile_b is None:
                     continue
 
-                if direction % 2 == 0:
+                if direction.axis == Axis.HORIZONTAL:
                     colour_a = tile_a.colour_ux
                     colour_b = tile_b.colour_ux
                 else:
@@ -50,8 +51,8 @@ def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
     for x in range(grid.width):
         for y in range(grid.height):
             tile_a = grid.get_tile_instance(x, y)
-            for direction in range(2):
-                tile_b = grid.get_tile_instance_offset(x, y, *direction_to_vec(direction + 1), edge_mode)
+            for direction in (Direction.RIGHT, Direction.UP):
+                tile_b = grid.get_tile_instance_offset(x, y, *direction.next.vec, edge_mode)
                 if tile_b is None:
                     continue
 

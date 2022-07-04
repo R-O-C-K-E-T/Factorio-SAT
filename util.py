@@ -2,7 +2,7 @@ import collections
 import math
 import traceback
 from os import path
-from typing import Callable, Iterator, List, Optional, Tuple
+from typing import Callable, Iterator, List, Optional
 
 LiteralType = int
 ClauseType = List[LiteralType]
@@ -166,10 +166,6 @@ def read_number(bits: List[bool], signed=False):
             result = result - (1 << len(bits))
 
     return result
-
-
-def direction_to_vec(direction: int) -> Tuple[int, int]:
-    return [(1, 0), (0, -1), (-1, 0), (0, 1)][direction]
 
 
 def bin_length(value: int):
@@ -394,7 +390,6 @@ __all__ = [
     'LiteralType',
     'bin_length',
     'break_symmetry',
-    'direction_to_vec',
     'get_popcount',
     'implies',
     'invert_components',

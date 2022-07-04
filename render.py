@@ -14,6 +14,7 @@ from OpenGL.GLU import *
 from pygame.locals import *
 
 import blueprint
+from direction import Direction
 from tile import AssemblingMachine, BaseTile, EmptyTile, Inserter
 import tilemaps
 from solver import Belt, Splitter, UndergroundBelt
@@ -97,7 +98,7 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
             glPushMatrix()
             glTranslatef(-0.5, -0.5, 0)
             tilemaps.BELT.render(animation % 16, [[11, 8, 4, 7], [0, 2, 1, 3], [6, 10, 9, 5]]
-                                 [(tile.output_direction - tile.input_direction + 1) % 4][tile.input_direction])
+                                 [(tile.output_direction.value - tile.input_direction.value + 1) % 4][tile.input_direction])
             glPopMatrix()
     elif isinstance(tile, UndergroundBelt):
         if layer == RenderLayer.BOTTOM:
@@ -120,32 +121,34 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
             glPopMatrix()
         elif layer == RenderLayer.TOP:
             glPushMatrix()
-            if tile.direction == 0:
+            if tile.direction == Direction.RIGHT:
                 if not tile.is_head:
                     glTranslatef(0, -0.5, 0)
                     tilemaps.SPLITTER_EAST[1].render(animation % 8, (animation // 8) % 4)
                 else:
                     glTranslatef(0, -5/16, 0)
                     tilemaps.SPLITTER_EAST[0].render(animation % 8, (animation // 8) % 4)
-            elif tile.direction == 2:
+            elif tile.direction == Direction.LEFT:
                 if not tile.is_head:
                     glTranslatef(0, -5/16, 0)
                     tilemaps.SPLITTER_WEST[0].render(animation % 8, (animation // 8) % 4)
                 else:
                     glTranslatef(0, -5/16, 0)
                     tilemaps.SPLITTER_WEST[1].render(animation % 8, (animation // 8) % 4)
-            elif tile.direction == 1:
+            elif tile.direction == Direction.UP:
                 if not tile.is_head:
                     tilemaps.SPLITTER_NORTH.render(animation % 8, (animation // 8) % 4, upper=(13/32, 1))
                 else:
                     tilemaps.SPLITTER_NORTH.render(animation % 8, (animation // 8) % 4, lower=(13/32, 0))
-            elif tile.direction == 3:
+            elif tile.direction == Direction.DOWN:
                 glTranslatef(-4/32, 0, 0)
                 if not tile.is_head:
                     tilemaps.SPLITTER_SOUTH.render(animation % 8, (animation // 8) % 4, lower=(14/32, 0))
                 else:
                     glTranslatef(-1/32, 0, 0)
                     tilemaps.SPLITTER_SOUTH.render(animation % 8, (animation // 8) % 4, upper=(14/32, 1))
+            else:
+                assert False
             glPopMatrix()
     elif isinstance(tile, Inserter):
         if layer == RenderLayer.BOTTOM:
@@ -164,7 +167,7 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
             else:
                 assert False
 
-            target = np.array([0.5, 0.5]) + np.array(direction_to_vec(tile.direction)) * t
+            target = np.array([0.5, 0.5]) + np.array(tile.direction.vec) * t
             centre = np.array([0.5, 0.5])
             delta = target - centre
 
