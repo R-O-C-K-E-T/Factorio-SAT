@@ -258,7 +258,7 @@ def prevent_double_edge_belts(grid: Grid):
 def set_nonempty_tiles(grid: Grid, blueprint_or_json: str):
     tiles = blueprint.convert_to_tiles(blueprint_or_json)
     for (row, col), tile in np.ndenumerate(tiles):
-        if tile is not None:
+        if not isinstance(tile, EmptyTile):
             grid.set_tile(col, row, tile)
 
 
