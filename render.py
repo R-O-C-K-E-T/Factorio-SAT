@@ -286,53 +286,50 @@ def render_solution(solution, animation: int, colouring=True, colour_count: Opti
                 glPopMatrix()
 
     if underground:
-        for x in reversed(range(solution.shape[0])):
-            for y in range(solution.shape[1]):
-                item = solution[x, y]
+        for (y, x), item in np.ndenumerate(solution):
+            try:
+                underground = item['underground']
+            except KeyError:
+                continue
 
-                try:
-                    underground = item['underground']
-                except KeyError:
-                    continue
+            glPushMatrix()
 
-                glPushMatrix()
+            glTranslatef(x, y, 0)
+            if any(underground[0::2]):
+                colour = item.get('colour_ux', 0)
+                if isinstance(colour, list):
+                    colour = colour[0]
 
-                glTranslatef(x, y, 0)
-                if any(underground[0::2]):
-                    colour = item.get('colour_ux', 0)
-                    if isinstance(colour, list):
-                        colour = colour[0]
-
-                    if colouring:
-                        if colour is None:
-                            glColor3f(0.5, 0.5, 0.5)
-                        else:
-                            glColor3fv(palette[colour])
+                if colouring:
+                    if colour is None:
+                        glColor3f(0.5, 0.5, 0.5)
                     else:
-                        glColor3f(1, 1, 1)
-                    glBegin(GL_LINES)
-                    glVertex2f(0, 0.5)
-                    glVertex2f(1, 0.5)
-                    glEnd()
+                        glColor3fv(palette[colour])
+                else:
+                    glColor3f(1, 1, 1)
+                glBegin(GL_LINES)
+                glVertex2f(0, 0.5)
+                glVertex2f(1, 0.5)
+                glEnd()
 
-                if any(underground[1::2]):
-                    colour = item.get('colour_uy', 0)
-                    if isinstance(colour, list):
-                        colour = colour[0]
+            if any(underground[1::2]):
+                colour = item.get('colour_uy', 0)
+                if isinstance(colour, list):
+                    colour = colour[0]
 
-                    if colouring:
-                        if colour is None:
-                            glColor3f(0.5, 0.5, 0.5)
-                        else:
-                            glColor3fv(palette[colour])
+                if colouring:
+                    if colour is None:
+                        glColor3f(0.5, 0.5, 0.5)
                     else:
-                        glColor3f(1, 1, 1)
+                        glColor3fv(palette[colour])
+                else:
+                    glColor3f(1, 1, 1)
 
-                    glBegin(GL_LINES)
-                    glVertex2f(0.5, 0)
-                    glVertex2f(0.5, 1)
-                    glEnd()
-                glPopMatrix()
+                glBegin(GL_LINES)
+                glVertex2f(0.5, 0)
+                glVertex2f(0.5, 1)
+                glEnd()
+            glPopMatrix()
 
 
 def render_attributes(solution, font, names: List[str]):
