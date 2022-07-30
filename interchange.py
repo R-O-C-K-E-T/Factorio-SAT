@@ -1,14 +1,17 @@
 import argparse
+from dataclasses import dataclass
 import json
+from typing import Iterable, List
 
 import numpy as np
 
 import belt_balancer
-from direction import Direction
+from cardinality import library_atleast, library_equals
+from direction import Axis, Direction
 import optimisations
 from solver import Grid
 from template import EdgeMode
-from util import invert_components, set_literal, set_number, set_numbers, set_numbers_equal
+from util import LiteralType, implies, invert_components, set_all_false, set_literal, set_not_number, set_number, set_numbers, set_numbers_equal
 
 
 def prevent_passing(grid: Grid):
@@ -78,6 +81,90 @@ def require_rotational_symmetry(grid: Grid):
         grid.clauses.append([-tile_a.is_splitter_head, -tile_b.is_splitter_head])
 
 
+@dataclass(frozen=True)
+class EdgeTemplate:
+    present: LiteralType
+    colour: List[LiteralType]
+
+
+def create_edge(grid: Grid, direction: Direction, from_position: int) -> List[EdgeTemplate]:
+    if direction.axis == Axis.HORIZONTAL:
+        line = np.stack([np.full(grid.height, from_position), np.arange(grid.height)], axis=-1)
+    elif direction.axis == Axis.VERTICAL:
+        line = np.stack([np.arange(grid.width), np.full(grid.width, from_position)], axis=-1)
+    else:
+        assert False
+
+    edge = []
+    for pos in line:
+        in_tile = grid.get_tile_instance(*pos)
+        out_tile = grid.get_tile_instance(*(pos + direction.vec))
+
+        edge.append(EdgeTemplate(in_tile.output_direction[direction], out_tile.colour))
+
+        present_underground = grid.allocate_variable()
+        grid.clauses += implies([present_underground], [[in_tile.underground[direction], out_tile.underground[direction]]])
+        grid.clauses += implies([-present_underground], set_all_false([in_tile.underground[direction], out_tile.underground[direction]]))
+
+        if direction.axis == Axis.VERTICAL:
+            underground_edge_colour = [grid.allocate_variable() for _ in in_tile.colour_uy]
+            grid.clauses += implies([in_tile.underground[direction]], set_numbers_equal(in_tile.colour_uy, underground_edge_colour))
+            grid.clauses += implies([out_tile.underground[direction]], set_numbers_equal(out_tile.colour_uy, underground_edge_colour))
+        elif direction.axis == Axis.HORIZONTAL:
+            underground_edge_colour = [grid.allocate_variable() for _ in in_tile.colour_ux]
+            grid.clauses += implies([in_tile.underground[direction]], set_numbers_equal(in_tile.colour_ux, underground_edge_colour))
+            grid.clauses += implies([out_tile.underground[direction]], set_numbers_equal(out_tile.colour_ux, underground_edge_colour))
+
+        edge.append(EdgeTemplate(present_underground, underground_edge_colour))
+    return edge
+
+
+def flow_counts(interchange_size: int) -> Iterable[int]:
+    if interchange_size % 2 == 1:
+        counts = (interchange_size // 2) - abs(np.arange(interchange_size * 2 - 1) - (interchange_size - 1)) // 2
+    else:
+        counts = (interchange_size // 2) - (abs(np.arange(interchange_size * 2 - 1) - (interchange_size - 1)) + 1) // 2
+    return counts[1::2]
+
+
+def require_correct_transport_through_edges(grid: Grid):
+    for y, count in zip(range(1, grid.height, 2), flow_counts(grid.height // 2)):
+        up_edge = create_edge(grid, Direction.UP, y + 1)
+        down_edge = create_edge(grid, Direction.DOWN, y)
+        up_flow = [grid.allocate_variable() for _ in up_edge]
+        for tile, lit in zip(up_edge, up_flow):
+            grid.clauses += implies([lit], [[tile.present]] + set_number(1, tile.colour))
+            grid.clauses += implies([-lit], [[-tile.present] + set_not_number(1, tile.colour)])
+
+        up_inv_flow = [grid.allocate_variable() for _ in down_edge]
+        for tile, lit in zip(down_edge, up_inv_flow):
+            grid.clauses += implies([lit], [[tile.present]] + set_number(1, tile.colour))
+            grid.clauses += implies([-lit], [[-tile.present] + set_not_number(1, tile.colour)])
+
+        grid.clauses += library_atleast(up_flow + invert_components(up_inv_flow), count + len(up_inv_flow), grid.pool)
+
+        down_flow = [grid.allocate_variable() for _ in down_edge]
+        for tile, lit in zip(down_edge, down_flow):
+            grid.clauses += implies([lit], [[tile.present]] + set_number(0, tile.colour))
+            grid.clauses += implies([-lit], [[-tile.present] + set_not_number(0, tile.colour)])
+
+        down_inv_flow = [grid.allocate_variable() for _ in up_edge]
+        for tile, lit in zip(up_edge, down_inv_flow):
+            grid.clauses += implies([lit], [[tile.present]] + set_number(0, tile.colour))
+            grid.clauses += implies([-lit], [[-tile.present] + set_not_number(0, tile.colour)])
+
+        grid.clauses += library_equals(down_flow + invert_components(down_inv_flow), count + len(down_inv_flow), grid.pool)
+
+    for x in range(grid.width - 1):
+        forward_edge = create_edge(grid, Direction.RIGHT, x)
+        backward_edge = create_edge(grid, Direction.LEFT, x + 1)
+
+        forward_flow = [edge.present for edge in forward_edge]
+        backward_flow = [edge.present for edge in backward_edge]
+
+        grid.clauses += library_equals(forward_flow + invert_components(backward_flow), grid.height + len(backward_edge), grid.pool)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Finds an interchange for building composite balancers')
     parser.add_argument('width', type=int, help='Interchange width')
@@ -145,8 +232,7 @@ if __name__ == '__main__':
     prevent_passing(grid)
 
     prevent_awkward_underground_entry(grid)
-    # for tile in grid.iterate_tiles():
-    #     grid.clauses += implies(invert_components(tile.all_direction), set_all_false(tile.underground))
+    require_correct_transport_through_edges(grid)
 
     if args.partial is not None:
         with args.partial:
