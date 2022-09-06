@@ -53,12 +53,12 @@ def prevent_awkward_underground_entry(grid: Grid):
             block[0, 1:3] = None  # Unimportant tiles
 
             grid.clauses.append(invert_components([
-                *invert_components(block[0, 0].all_direction),
+                block[0, 0].is_empty,
                 block[0, 0].underground[direction],
 
                 -block[1, 0].underground[direction],
 
-                *invert_components(block[1, 1].all_direction),
+                block[1, 1].is_empty,
 
                 # block[2,0].input_direction[direction],
                 block[2, 0].output_direction[across_direction],
@@ -75,8 +75,8 @@ def prevent_awkward_underground_entry(grid: Grid):
 def require_rotational_symmetry(grid: Grid):
     for tile_a, tile_b in zip(grid.tiles.flatten(), np.rot90(grid.tiles, 2).flatten()):
         grid.clauses += set_numbers_equal(
-            tile_a.input_direction + tile_a.output_direction + tile_a.underground + [tile_a.is_splitter],
-            tile_b.output_direction + tile_b.input_direction + tile_b.underground + [tile_b.is_splitter],
+            tile_a.input_direction + tile_a.output_direction + tile_a.underground + [tile_a.is_empty, tile_a.is_belt, tile_a.is_splitter, tile_a.is_underground_in, tile_a.is_underground_out],
+            tile_b.output_direction + tile_b.input_direction + tile_b.underground + [tile_b.is_empty, tile_b.is_belt, tile_b.is_splitter, tile_b.is_underground_out, tile_b.is_underground_in],
         )
         grid.clauses.append([-tile_a.is_splitter_head, -tile_b.is_splitter_head])
 

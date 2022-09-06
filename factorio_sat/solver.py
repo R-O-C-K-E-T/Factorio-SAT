@@ -2,20 +2,25 @@ from typing import Callable, List, Dict, Any, Optional, Protocol, Tuple, Union
 
 from pysat.formula import IDPool
 
-from .cardinality import quadratic_amo
+from .cardinality import quadratic_amo, quadratic_one
 from .direction import Axis, Direction
 from .template import (ArrayTemplate, BoolTemplate, CompositeTemplate, CompositeTemplateParams, EdgeMode,
-                       EdgeModeType, FactorioGrid, NestedArray, NumberTemplate, OneHotTemplate, flatten)
+                      EdgeModeType, FactorioGrid, NestedArray, NumberTemplate, OneHotTemplate, flatten)
 from .tile import BaseTile, Belt, EmptyTile, Splitter, UndergroundBelt
 from .util import LiteralType, implies, invert_components, literals_same, set_all_false, set_literal, set_maximum, set_not_number, set_number, set_numbers_equal
 
 
 class TileTemplate(Protocol):
+    type: List[LiteralType]
+    is_empty: LiteralType
+    is_belt: LiteralType
+    is_underground_in: LiteralType
+    is_underground_out: LiteralType
+    is_splitter: LiteralType
+    is_splitter_head: LiteralType
     input_direction: List[LiteralType]
     output_direction: List[LiteralType]
     all_direction: List[LiteralType]
-    is_splitter: LiteralType
-    is_splitter_head: LiteralType
     underground: List[LiteralType]
     colour: List[LiteralType]
     colour_ux: List[LiteralType]
@@ -36,12 +41,17 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
         self.underground_length = underground_length
 
         template = {
+            'is_belt': BoolTemplate(),
+            'is_empty': BoolTemplate(),
+            'is_splitter': BoolTemplate(),
+            'is_underground_in': BoolTemplate(),
+            'is_underground_out': BoolTemplate(),
+            'is_splitter_head': BoolTemplate(),
             'input_direction': OneHotTemplate(4),
             'output_direction': OneHotTemplate(4),
-            'all_direction': lambda input_direction, output_direction: [*input_direction, *output_direction],
-            'is_splitter': BoolTemplate(),
-            'is_splitter_head': BoolTemplate(),
             'underground': ArrayTemplate(BoolTemplate(), (4,)),
+            'type': lambda is_belt, is_empty, is_splitter, is_underground_in, is_underground_out: [is_belt, is_empty, is_splitter, is_underground_in, is_underground_out],
+            'all_direction': lambda input_direction, output_direction: [*input_direction, *output_direction],
         }
         if colours is not None:
             self.colour_bits = (colours - 1).bit_length()
@@ -59,14 +69,26 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
         super().__init__(template, width, height, pool)
 
         for tile in self.iterate_tiles():
+            # Each tile has exactly one type
+            self.clauses += quadratic_one(tile.type)
+            
+            # Empty tiles must not have any inputs/outputs
+            self.clauses += implies([tile.is_empty], set_all_false(tile.all_direction))
+            # Belts must have inputs and outputs
+            self.clauses += implies([tile.is_belt], [tile.input_direction, tile.output_direction])
+            # Underground inputs must have an input, but no output
+            self.clauses += implies([tile.is_underground_in], [tile.input_direction] + set_all_false(tile.output_direction))
+            # Underground outputs must have an output, but no input
+            self.clauses += implies([tile.is_underground_out], [tile.output_direction] + set_all_false(tile.input_direction))
+            # Splitters must have at least one input/output
+            self.clauses += implies([tile.is_splitter], [tile.all_direction])
+
             self.clauses += quadratic_amo(tile.input_direction)  # Have an input direction or nothing
             self.clauses += quadratic_amo(tile.output_direction)  # Have an output direction or nothing
 
             self.clauses += quadratic_amo(tile.underground[0::2])  # Have a underground along -x, +x or nothing
             self.clauses += quadratic_amo(tile.underground[1::2])  # Have a underground along -y, +y or nothing
 
-            # If a tile is a splitter, then it is not empty
-            self.clauses += implies([tile.is_splitter], [tile.all_direction])
             # If a tile is a splitter head, then it is a splitter
             self.clauses.append([-tile.is_splitter_head, tile.is_splitter])
 
@@ -119,21 +141,21 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
         tile_instance = self.get_tile_instance(x, y)
 
         if isinstance(tile, EmptyTile):
-            self.clauses += set_all_false(tile_instance.all_direction)
+            self.clauses.append([tile_instance.is_empty])
         elif isinstance(tile, Splitter):
             self.clauses.append([tile_instance.is_splitter])
             self.clauses.append([set_literal(tile_instance.is_splitter_head, tile.is_head)])
             self.clauses.append([tile_instance.input_direction[tile.direction], tile_instance.output_direction[tile.direction]])
         elif isinstance(tile, Belt) or isinstance(tile, UndergroundBelt):
-            self.clauses += [[-tile_instance.is_splitter]]
-            if tile.input_direction is None:
-                self.clauses += set_all_false(tile_instance.input_direction)
-            else:
+            if isinstance(tile, Belt):
+                self.clauses.append([tile_instance.is_belt])
+            elif isinstance(tile, UndergroundBelt):
+                self.clauses.append([tile_instance.is_underground_in if tile.is_input else tile_instance.is_underground_out])
+            
+            if tile.input_direction is not None:
                 self.clauses += [[tile_instance.input_direction[tile.input_direction]]]
 
-            if tile.output_direction is None:
-                self.clauses += set_all_false(tile_instance.output_direction)
-            else:
+            if tile.output_direction is not None:
                 self.clauses += [[tile_instance.output_direction[tile.output_direction]]]
         else:
             raise RuntimeError(f'Unsupported tile type {tile}')
@@ -152,16 +174,18 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                 direction = output_direction
                 assert direction is not None
             return Splitter(direction, cell['is_splitter_head'])
-        elif input_direction is None and output_direction is None:
+        elif cell['is_empty']:
             return EmptyTile()
-        elif input_direction is None or output_direction is None:
-            direction = input_direction
-            if direction is None:
-                direction = output_direction
-                assert direction is not None
-            return UndergroundBelt(direction, output_direction is None)
-        else:
+        elif cell['is_underground_in']:
+            assert input_direction is not None
+            return UndergroundBelt(input_direction, True)
+        elif cell['is_underground_out']:
+            assert output_direction is not None
+            return UndergroundBelt(output_direction, False)
+        elif cell['is_belt']:
             return Belt(input_direction, output_direction)
+        else:
+            assert False
 
     def prevent_colour(self, colour: int):
         for x in range(self.width):
@@ -300,46 +324,29 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                     tile_a = self.get_tile_instance(x, y)
 
                     # Underground entrance/exit cannot be above underground segment with same direction
-                    self.clauses += implies(
-                        [tile_a.input_direction[direction], -tile_a.is_splitter, *invert_components(tile_a.output_direction)],
+                    self.clauses += implies([tile_a.is_underground_in, tile_a.input_direction[direction]],
                         [[-tile_a.underground[direction]], [-tile_a.underground[reverse_dir]]]
                     )
-                    self.clauses += implies(
-                        [tile_a.output_direction[direction], -tile_a.is_splitter, *invert_components(tile_a.input_direction)],
+                    self.clauses += implies([tile_a.is_underground_out, tile_a.output_direction[direction]],
                         [[-tile_a.underground[direction]], [-tile_a.underground[reverse_dir]]]
                     )
 
                     # Underground entrance/exit must have a underground segment after/before it
-                    clause = [
-                        -tile_a.input_direction[direction],
-                        *tile_a.output_direction,
-                        tile_a.is_splitter,
-                    ]
-
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
                     if tile_b is not None:
-                        clause.append(tile_b.underground[direction])
-                        self.clauses.append(clause)
+                        self.clauses += implies([tile_a.is_underground_in, tile_a.input_direction[direction]], [[tile_b.underground[direction]]])
 
-                    clause = [
-                        -tile_a.output_direction[direction],
-                        *tile_a.input_direction,
-                        tile_a.is_splitter,
-                    ]
                     tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
                     if tile_b is not None:
-                        clause.append(tile_b.underground[direction])
-                        self.clauses.append(clause)
+                        self.clauses += implies([tile_a.is_underground_out, tile_a.output_direction[direction]], [[tile_b.underground[direction]]])
 
                     # Underground segment must propagate or have output
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
                     if tile_b is not None:
-                        self.clauses += implies(
-                            [tile_a.underground[direction], -tile_b.underground[direction]],
+                        self.clauses += implies([tile_a.underground[direction], -tile_b.underground[direction]],
                             [
+                                [tile_b.is_underground_out],
                                 [tile_b.output_direction[direction]],
-                                *([-tile_b.input_direction[d]] for d in Direction),
-                                [-tile_b.is_splitter],
                             ]
                         )
 
@@ -348,9 +355,8 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]],
                             [
+                                [tile_b.is_underground_in],
                                 [tile_b.input_direction[direction]],
-                                *([-tile_b.output_direction[d]] for d in Direction),
-                                [-tile_b.is_splitter],
                             ]
                         )
 

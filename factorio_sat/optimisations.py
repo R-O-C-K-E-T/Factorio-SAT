@@ -26,15 +26,15 @@ def prevent_empty_along_underground(grid: Grid, edge_mode: EdgeModeType):
                     start, *middle, end = tiles
                     if len(middle) > 0:
                         clause = [
+                            -start.is_underground_in,
                             -start.input_direction[direction],
-                            *start.output_direction
                         ]
 
                         for tile in middle:
-                            clause += tile.all_direction
+                            clause.append(-tile.is_empty)
 
                         clause += [
-                            *end.input_direction,
+                            -end.is_underground_out,
                             -end.output_direction[direction],
                         ]
 
@@ -83,7 +83,7 @@ def glue_splitters(grid: Grid):
         for y in range(grid.height):
             tile = grid.get_tile_instance(x, y)
             for direction in Direction:
-                if direction == Direction.RIGHT and (x == 1 or x == grid.width - 2):  # Ignore edge splitters
+                if direction == Direction.RIGHT and (x == 1 or x == grid.width - 2):  # Ignore edge splitters, TODO make this more generic
                     continue
 
                 dx0, dy0 = direction.vec
@@ -101,11 +101,11 @@ def glue_splitters(grid: Grid):
 
                     -tile_in0.input_direction[direction],
                     -tile_in0.output_direction[direction],
-                    tile_in0.is_splitter,
+                    -tile_in0.is_belt,
 
                     -tile_in1.input_direction[direction],
                     -tile_in1.output_direction[direction],
-                    tile_in1.is_splitter,
+                    -tile_in1.is_belt,
                 ])
 
 
@@ -123,12 +123,12 @@ def shrink_underground(grid: Grid, edge_mode: EdgeModeType):
                 grid.clauses += implies([
                     -tile_a.underground[direction],
                     tile_b.underground[direction],
-                ], [set_not_number(0, tile_b.all_direction)])
+                ], [[-tile_b.is_empty]])
 
                 grid.clauses += implies([
                     tile_a.underground[direction],
                     -tile_b.underground[direction],
-                ], [set_not_number(0, tile_a.all_direction)])
+                ], [[-tile_a.is_empty]])
 
 
 def expand_underground_infinite(grid: Grid, min_x: int = 0, min_y: int = 0, max_x: Optional[int] = None, max_y: Optional[int] = None):
@@ -142,34 +142,32 @@ def expand_underground_infinite(grid: Grid, min_x: int = 0, min_y: int = 0, max_
             for direction in Direction:
                 dx, dy = direction.vec
 
-                far_x = x + dx * 2
-                far_y = y + dy * 2
+                far_x = x + dx * 1
+                far_y = y + dy * 1
                 if far_x > max_x or far_y > max_y or far_x < min_x or far_y < min_y:
                     continue
 
-                tiles = [grid.get_tile_instance_offset(x, y, dx * i, dy * i, EdgeMode.NO_WRAP) for i in range(3)]
+                tiles = [grid.get_tile_instance_offset(x, y, dx * i, dy * i, EdgeMode.NO_WRAP) for i in range(2)]
                 assert all(tile is not None for tile in tiles)
 
                 # Prevent: Belt, Input Underground
                 grid.clauses.append([
                     -tiles[0].input_direction[direction],
                     -tiles[0].output_direction[direction],
-                    tiles[0].is_splitter,
+                    -tiles[0].is_belt,
 
-                    tiles[1].underground[direction],
-
-                    -tiles[2].underground[direction],
+                    -tiles[1].is_underground_in,
+                    -tiles[1].input_direction[direction],
                 ])
 
                 # Prevent: Output Underground, Belt
                 grid.clauses.append([
-                    -tiles[0].underground[direction],
+                    -tiles[0].is_underground_out,
+                    -tiles[1].output_direction[direction],
 
-                    tiles[1].underground[direction],
-
-                    -tiles[2].input_direction[direction],
-                    -tiles[2].output_direction[direction],
-                    tiles[2].is_splitter,
+                    -tiles[1].input_direction[direction],
+                    -tiles[1].output_direction[direction],
+                    -tiles[1].is_belt,
                 ])
 
 
@@ -201,7 +199,7 @@ def expand_underground(grid: Grid, min_x: int = 0, min_y: int = 0, max_x: Option
                     grid.clauses.append([
                         -tiles[0].input_direction[direction],
                         -tiles[0].output_direction[direction],
-                        tiles[0].is_splitter,
+                        -tiles[0].is_belt,
 
                         tiles[1].underground[direction],
 
@@ -220,7 +218,7 @@ def expand_underground(grid: Grid, min_x: int = 0, min_y: int = 0, max_x: Option
 
                         -tiles[-1].input_direction[direction],
                         -tiles[-1].output_direction[direction],
-                        tiles[-1].is_splitter,
+                        -tiles[-1].is_belt,
                     ])
 
 
@@ -244,16 +242,16 @@ def prevent_belt_hooks(grid: Grid, edge_mode: EdgeModeType):
                     for in_direction in (direction, tangent):
                         for out_direction in (tangent, inverse):
                             grid.clauses.append([
+                                -tile00.is_belt,
                                 -tile00.input_direction[in_direction],
                                 -tile00.output_direction[direction],
-                                tile00.is_splitter,
 
                                 -tile01.output_direction[tangent],
 
                                 -tile11.output_direction[inverse],
 
+                                -tile10.is_belt,
                                 -tile10.output_direction[out_direction],
-                                tile10.is_splitter,
                             ])
 
 
@@ -423,8 +421,8 @@ def break_vertical_symmetry(grid: Grid):
             top += top_tile.all_direction[::2]
             bot += bot_tile.all_direction[::2]
 
-            top += [top_tile.is_splitter]
-            bot += [bot_tile.is_splitter]
+            top += top_tile.type
+            bot += bot_tile.type
 
             top += top_tile.all_direction[1::4] + top_tile.all_direction[3::4]
             bot += bot_tile.all_direction[3::4] + bot_tile.all_direction[1::4]
@@ -447,8 +445,8 @@ def break_horisontal_symmetry(grid: Grid, min_x: int = 0, max_x: Optional[int] =
             start += start_tile.input_direction + start_tile.output_direction
             end += end_tile.output_direction + end_tile.input_direction
 
-            start += [start_tile.is_splitter]
-            end += [end_tile.is_splitter]
+            start += start_tile.type
+            end += end_tile.type
 
     grid.clauses += break_symmetry(start, end, grid.allocate_variable)
 
@@ -474,7 +472,7 @@ def prevent_spirals(grid: Grid):
 
                         # block[2, 1].input_direction[across_direction],
                         block[2, 1].output_direction[across_direction],
-                        -block[2, 1].is_splitter,
+                        block[2, 1].is_belt,
 
                         # block[2, 2].input_direction[across_direction],
                         block[2, 2].output_direction[inv_direction],
@@ -501,7 +499,7 @@ def prevent_spirals(grid: Grid):
 
                         # block[2, 1].output_direction[inv_across_direction],
                         block[2, 1].input_direction[inv_across_direction],
-                        -block[2, 1].is_splitter,
+                        block[2, 1].is_belt,
 
                         # block[2, 2].output_direction[inv_across_direction],
                         block[2, 2].input_direction[direction],
@@ -556,11 +554,11 @@ def glue_partial_splitters(grid: Grid, edge_mode: EdgeModeType):
 
                 block[0, 1].input_direction[direction],
                 block[0, 1].output_direction[direction],
-                -block[0, 1].is_splitter,
+                block[0, 1].is_belt,
 
                 block[1, 1].input_direction[direction],
                 block[1, 1].output_direction[direction],
-                -block[1, 1].is_splitter,
+                block[1, 1].is_belt,
             ]))
 
             grid.clauses.append(invert_components([
@@ -572,11 +570,11 @@ def glue_partial_splitters(grid: Grid, edge_mode: EdgeModeType):
 
                 block[0, 1].input_direction[direction],
                 block[0, 1].output_direction[direction],
-                -block[0, 1].is_splitter,
+                block[0, 1].is_belt,
 
                 block[1, 1].input_direction[direction],
                 block[1, 1].output_direction[direction],
-                -block[1, 1].is_splitter,
+                block[1, 1].is_belt,
             ]))
 
 
