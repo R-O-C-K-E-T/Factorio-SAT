@@ -60,7 +60,12 @@ def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[LiteralTy
         model = []
         while True:
             line = result.readline()
-            variables = line.split(' ')
+            if len(line) == 0:
+                break
+            if line.startswith('c'):
+                print(line, file=sys.stderr, end='')
+                continue
+            variables = line.split()
             if variables[0] != 'v':
                 raise RuntimeError('Solution not returned correctly: ' + line)
             model += [int(v) for v in variables[1:]]
