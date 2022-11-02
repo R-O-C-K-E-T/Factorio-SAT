@@ -1,4 +1,5 @@
 from typing import *
+from os import path
 
 from OpenGL.GL import *
 from PIL import Image
@@ -87,28 +88,29 @@ class Tilemap:
 
 def init():
     global BELT, UNDERGROUND, SPLITTER_EAST, SPLITTER_WEST, SPLITTER_NORTH, SPLITTER_SOUTH, INSERTER_PLATFORM, INSERTER_HAND_BASE, INSERTER_HAND_OPEN, INSERTER_HAND_CLOSED, ASSEMBLING_MACHINE
+    base_path = path.join(path.dirname(__file__), 'assets')
 
-    BELT = Tilemap(load_image('assets/hr-transport-belt.png'), (128, 128), PIXELS_PER_UNIT)
-    UNDERGROUND = Tilemap(load_image('assets/hr-underground-belt-structure.png'), (192, 192), PIXELS_PER_UNIT)
+    BELT = Tilemap(load_image(path.join(base_path, 'hr-transport-belt.png')), (128, 128), PIXELS_PER_UNIT)
+    UNDERGROUND = Tilemap(load_image(path.join(base_path, 'hr-underground-belt-structure.png')), (192, 192), PIXELS_PER_UNIT)
     SPLITTER_EAST = [
-        Tilemap(load_image('assets/hr-splitter-east.png'), (90, 84), PIXELS_PER_UNIT),
-        Tilemap(load_image('assets/hr-splitter-east-top_patch.png'), (90, 104), PIXELS_PER_UNIT),
+        Tilemap(load_image(path.join(base_path, 'hr-splitter-east.png')), (90, 84), PIXELS_PER_UNIT),
+        Tilemap(load_image(path.join(base_path, 'hr-splitter-east-top_patch.png')), (90, 104), PIXELS_PER_UNIT),
     ]
     SPLITTER_WEST = [
-        Tilemap(load_image('assets/hr-splitter-west.png'), (90, 86), PIXELS_PER_UNIT),
-        Tilemap(load_image('assets/hr-splitter-west-top_patch.png'), (90, 96), PIXELS_PER_UNIT),
+        Tilemap(load_image(path.join(base_path, 'hr-splitter-west.png')), (90, 86), PIXELS_PER_UNIT),
+        Tilemap(load_image(path.join(base_path, 'hr-splitter-west-top_patch.png')), (90, 96), PIXELS_PER_UNIT),
     ]
-    SPLITTER_SOUTH = Tilemap(load_image('assets/hr-splitter-south.png'), (164, 64), PIXELS_PER_UNIT)
-    SPLITTER_NORTH = Tilemap(load_image('assets/hr-splitter-north.png'), (160, 70), PIXELS_PER_UNIT)
+    SPLITTER_SOUTH = Tilemap(load_image(path.join(base_path, 'hr-splitter-south.png')), (164, 64), PIXELS_PER_UNIT)
+    SPLITTER_NORTH = Tilemap(load_image(path.join(base_path, 'hr-splitter-north.png')), (160, 70), PIXELS_PER_UNIT)
 
-    INSERTER_PLATFORM = Tilemap(load_image('assets/hr-inserter-platform.png'), (105, 79),
-                                PIXELS_PER_UNIT), Tilemap(load_image('assets/hr-long-handed-inserter-platform.png'), (105, 79), PIXELS_PER_UNIT)
+    INSERTER_PLATFORM = Tilemap(load_image(path.join(base_path, 'hr-inserter-platform.png')), (105, 79),
+                                PIXELS_PER_UNIT), Tilemap(load_image(path.join(base_path, 'hr-long-handed-inserter-platform.png')), (105, 79), PIXELS_PER_UNIT)
 
-    INSERTER_HAND_BASE = load_image('assets/hr-inserter-hand-base.png'), load_image('assets/hr-long-handed-inserter-hand-base.png')
-    INSERTER_HAND_OPEN = load_image('assets/hr-inserter-hand-open.png'), load_image('assets/hr-long-handed-inserter-hand-open.png')
-    INSERTER_HAND_CLOSED = load_image('assets/hr-inserter-hand-closed.png'), load_image('assets/hr-long-handed-inserter-hand-closed.png')
+    INSERTER_HAND_BASE = load_image(path.join(base_path, 'hr-inserter-hand-base.png')), load_image(path.join(base_path, 'hr-long-handed-inserter-hand-base.png'))
+    INSERTER_HAND_OPEN = load_image(path.join(base_path, 'hr-inserter-hand-open.png')), load_image(path.join(base_path, 'hr-long-handed-inserter-hand-open.png'))
+    INSERTER_HAND_CLOSED = load_image(path.join(base_path, 'hr-inserter-hand-closed.png')), load_image(path.join(base_path, 'hr-long-handed-inserter-hand-closed.png'))
 
-    ASSEMBLING_MACHINE = Tilemap(load_image('assets/hr-assembling-machine-1.png'), (214, 226), PIXELS_PER_UNIT)
+    ASSEMBLING_MACHINE = Tilemap(load_image(path.join(base_path, 'hr-assembling-machine-1.png')), (214, 226), PIXELS_PER_UNIT)
 
 
 PIXELS_PER_UNIT = 64

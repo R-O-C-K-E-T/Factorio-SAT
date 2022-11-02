@@ -3,12 +3,12 @@ from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
-import belt_balancer
-import optimisations
-import stringifier
-from network import deduplicate_network, open_network
-from solver import Grid
-from template import EdgeMode
+from factorio_sat import belt_balancer
+from factorio_sat import optimisations
+from factorio_sat import stringifier
+from factorio_sat.network import deduplicate_network, open_network
+from factorio_sat.solver import Grid
+from factorio_sat.template import EdgeMode
 
 TEST_EDGE_START = '┌'
 TEST_EDGE_MIDDLE = '│'

@@ -2,12 +2,12 @@ from typing import Callable, List, Dict, Any, Optional, Protocol, Tuple, Union
 
 from pysat.formula import IDPool
 
-from cardinality import quadratic_amo
-from direction import Axis, Direction
-from template import (ArrayTemplate, BoolTemplate, CompositeTemplate, CompositeTemplateParams, EdgeMode,
-                      EdgeModeType, FactorioGrid, NestedArray, NumberTemplate, OneHotTemplate, flatten)
-from tile import BaseTile, Belt, EmptyTile, Splitter, UndergroundBelt
-from util import LiteralType, implies, invert_components, literals_same, set_all_false, set_literal, set_maximum, set_not_number, set_number, set_numbers_equal
+from .cardinality import quadratic_amo
+from .direction import Axis, Direction
+from .template import (ArrayTemplate, BoolTemplate, CompositeTemplate, CompositeTemplateParams, EdgeMode,
+                       EdgeModeType, FactorioGrid, NestedArray, NumberTemplate, OneHotTemplate, flatten)
+from .tile import BaseTile, Belt, EmptyTile, Splitter, UndergroundBelt
+from .util import LiteralType, implies, invert_components, literals_same, set_all_false, set_literal, set_maximum, set_not_number, set_number, set_numbers_equal
 
 
 class TileTemplate(Protocol):

@@ -9,11 +9,11 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, Tupl
 
 import numpy as np
 
-import belt_balancer
-import blueprint
-import optimisations
-from network import deduplicate_network, get_input_output_colours, open_network
-from template import EdgeMode
+from . import belt_balancer
+from . import blueprint
+from . import optimisations
+from .network import deduplicate_network, get_input_output_colours, open_network
+from .template import EdgeMode
 
 MAXIMUM_UNDERGROUND_LENGTHS = {
     'normal': 4,
@@ -227,11 +227,11 @@ def export_crosstable(stores: List[NetworkSolutionStore], crosstable_filename: s
             f.write('\n')
 
 
-if __name__ == '__main__':
+def main():
     base_path = 'networks'
-    result_file = 'optimal_balancers.json'
 
     parser = argparse.ArgumentParser(description='Calculates optimal balancers')
+    parser.add_argument('--database', type=str, default='optimal_balancers.json', help='File for storing/querying results')
 
     subparsers = parser.add_subparsers(dest='mode', required=True)
     query_parser = subparsers.add_parser('query')
@@ -250,6 +250,8 @@ if __name__ == '__main__':
 
     export_crosstable_parser.add_argument('filename', type=str, help='Name of file to export crosstable markdown as')
     args = parser.parse_args()
+
+    result_file: str = args.database
 
     if 'objective' in args:
         if args.objective == 'area':
@@ -330,3 +332,7 @@ if __name__ == '__main__':
         export_crosstable(stores, args.filename)
     else:
         assert False
+
+
+if __name__ == '__main__':
+    main()

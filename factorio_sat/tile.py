@@ -1,7 +1,7 @@
 from typing import Any, ClassVar, Dict, Optional
 from dataclasses import dataclass
 
-from direction import Axis, Direction
+from .direction import Axis, Direction
 
 TILE_TYPES = {}
 

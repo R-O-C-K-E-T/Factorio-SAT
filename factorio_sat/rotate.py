@@ -5,7 +5,7 @@ from typing import Callable
 
 import numpy as np
 
-from tile import BaseTile, TransformableTile
+from .tile import BaseTile, TransformableTile
 
 
 class Operation(Enum):
@@ -21,7 +21,7 @@ class Operation(Enum):
         self.grid = grid
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Apply transformations to tile grids')
     parser.add_argument('operation', nargs='?', type=str, choices=[op.name.lower() for op in Operation], default=Operation.ROT_90.name.lower())
     args = parser.parse_args()
@@ -36,3 +36,7 @@ if __name__ == '__main__':
                 cell['tile'] = operation.tile(tile).write()
 
         print(json.dumps(solution.tolist()))
+
+
+if __name__ == '__main__':
+    main()

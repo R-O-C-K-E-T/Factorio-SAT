@@ -21,12 +21,19 @@ Enhancing the Factorio experience with SAT solvers.
 
 ## Setup
 ```bash
-# Install dependencies
-python -m pip install -r requirements.txt
+# Create virtual environment
+python -m venv .venv
+
+# Activate environment
+source .venv/bin/activate # Unix/macOS
+# or
+.venv\Scripts\activate # Windows
+# NOTE: Activating needs to be done for every new terminal session
+
+pip install --editable .
 
 # Get textures
-cd assets
-python fetch.py /path/to/factorio/install
+fetch_assets /path/to/factorio/install
 
 # Factorio install directory should look something like:
 # Factorio/
@@ -43,20 +50,20 @@ For rendering splitter networks `graphviz` needs to be installed. This can be do
 
 | Tool                                 | Usage                                                                            |
 | ------------------------------------ | -------------------------------------------------------------------------------- |
-| fetch.py                             | Load textures (required for render.py)                                           |
-| blueprint.py                         | Import/Export blueprints                                                         |
-| blueprint_book.py                    | Pack/Unpack blueprint books                                                      |
-| render.py                            | Render generated balancers                                                       |
-| network.py                           | Tools for managing balancer networks                                             |
-| belt_balancer.py                     | Generate balancer from a network                                                 |
-| belt_balancer_net_free.py            | Generate any n to n balancer                                                     |
-| belt_balancer_net_free_power_of_2.py | Generates n to n balancers where n is a power of 2 (faster than generic version) |
-| interchange.py                       | Generate an interchange for building composite balancers                         |
-| make_block.py                        | Generate random blocks of belts                                                  |
-| calculate_optimal.py                 | Find optimal balancers                                                           |
-| rotate.py                            | Rotate a balancer 90 degrees                                                     |
-| stringifier.py                       | Convert balancers to and from text                                               |
-| test_runner.py                       | Run the test suite                                                               |
+| fetch                             | Load textures (required for render.py)                                           |
+| blueprint                         | Import/Export blueprints                                                         |
+| blueprint_book                    | Pack/Unpack blueprint books                                                      |
+| render                            | Render generated balancers                                                       |
+| network                           | Tools for managing balancer networks                                             |
+| belt_balancer                     | Generate balancer from a network                                                 |
+| belt_balancer_net_free            | Generate any n to n balancer                                                     |
+| belt_balancer_net_free_power_of_2 | Generates n to n balancers where n is a power of 2 (faster than generic version) |
+| interchange                       | Generate an interchange for building composite balancers                         |
+| make_block                        | Generate random blocks of belts                                                  |
+| calculate_optimal                 | Find optimal balancers                                                           |
+| rotate                            | Rotate a balancer 90 degrees                                                     |
+| stringifier                       | Convert balancers to and from text                                               |
+| test_runner                       | Run the test suite                                                               |
 
 ## Controls (render.py)
 | Key | Usage                          |
@@ -69,25 +76,25 @@ For rendering splitter networks `graphviz` needs to be installed. This can be do
 ## Example Usages
 ```bash
 # Find and render all 4 to 4 balancers that fit in a 10x4 square
-python belt_balancer.py --fast --all networks/4x4 10 4 | python render.py
+belt_balancer --fast --all networks/4x4 10 4 | render
 
 # Start computing the optimal by length with maximum underground length of 16
-python calculate_optimal.py compute 16 length
+calculate_optimal compute 16 length
 
 # Render optimal area balancers with maximum underground length 4
-python calculate_optimal.py query 4 area | python render.py
+calculate_optimal query 4 area | render
 
 # Generate and render interchanges for a 22 to 22 balancer made of two 11 to 11 balancers
-python interchange.py --alternating --underground-length 8 22 --all 8 22 | python render.py
+interchange --alternating --underground-length 8 --all 8 22 | render
 
 # Render a network graph
-python network.py render networks/5x5 5_to_5.png
+network render networks/5x5 5_to_5.png
 
 # Save an animation of a blueprint to a file
-cat blueprint.txt | python blueprint.py decode | python render.py --export-all
+cat blueprint.txt | blueprint decode | render --export-all
 
 # Generate 50 random blocks and save to a blueprint book
-python make_block.py 16 16 --all --single-loop | head -n 50 | python blueprint.py encode | python blueprint_book.py pack --label "Blocks" > blueprint_book.txt
+make_block 16 16 --all --single-loop | head -n 50 | blueprint encode | blueprint_book pack --label "Blocks" > blueprint_book.txt
 ```
 
 ## TODO

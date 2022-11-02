@@ -1,8 +1,0 @@
-numpy
-python-sat
-luaparser
-pygame
-pillow
-PyOpenGL
-graphviz
-ffmpeg-python

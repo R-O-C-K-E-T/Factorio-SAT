@@ -2,13 +2,13 @@ import argparse
 import json
 import math
 
-import belt_balancer
-from direction import Direction
-import optimisations
-from cardinality import library_equals, quadratic_one
-from solver import Belt, Grid
-from template import EdgeMode, OneHotTemplate
-from util import implies, invert_components, is_power_of_two, literals_different, set_all_false, set_numbers_equal
+from . import belt_balancer
+from . import optimisations
+from .direction import Direction
+from .cardinality import library_equals, quadratic_one
+from .solver import Belt, Grid
+from .template import EdgeMode, OneHotTemplate
+from .util import implies, invert_components, is_power_of_two, literals_different, set_all_false, set_numbers_equal
 
 
 def create_balancer(width: int, height: int, underground_length: int) -> Grid:
@@ -89,7 +89,7 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
     return grid
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(
         description='Creates n to n belt balancers where n is a power of two. '
                     'Note that the outputs of this program do not include the first and last rows of splitters.')
@@ -125,3 +125,7 @@ if __name__ == '__main__':
         print(json.dumps(solution.tolist()))
         if not args.all:
             break
+
+
+if __name__ == '__main__':
+    main()

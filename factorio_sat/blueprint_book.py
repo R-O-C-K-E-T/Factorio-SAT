@@ -1,7 +1,7 @@
 import argparse
 import copy
 
-import blueprint
+from . import blueprint
 
 
 def unpack_book(blueprint_book):
@@ -25,7 +25,7 @@ def pack_book(blueprints, label=None):
     return blueprint_book
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Manipulates blueprint books')
     parser.add_argument('mode', choices=['pack', 'unpack'])
     parser.add_argument('--label', type=str, help='Output blueprint book label')
@@ -45,3 +45,7 @@ if __name__ == '__main__':
             except EOFError:
                 break
         print(blueprint.encode_blueprint(pack_book(blueprints, args.label)))
+
+
+if __name__ == '__main__':
+    main()

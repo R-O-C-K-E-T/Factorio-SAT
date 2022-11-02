@@ -1,7 +1,7 @@
 import ctypes
 from typing import Callable, List, Set
 
-from util import ClauseList, ClauseType, LiteralType
+from .util import ClauseList, ClauseType, LiteralType
 
 
 class IPASIRLibrary:

@@ -9,9 +9,9 @@ import struct
 import zlib
 
 import numpy as np
-from direction import Direction
 
-from tile import AssemblingMachine, BaseTile, Belt, BeltConnectedTile, EmptyTile, Inserter, Splitter, UndergroundBelt
+from .direction import Direction
+from .tile import AssemblingMachine, BaseTile, Belt, BeltConnectedTile, EmptyTile, Inserter, Splitter, UndergroundBelt
 
 
 class TransportBeltLevel(enum.Enum):
@@ -269,7 +269,7 @@ def convert_to_tiles(blueprint_or_json: str) -> np.ndarray:
     return tiles
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Encode/Decode blueprint strings')
     subparsers = parser.add_subparsers(dest='mode', required=True)
 
@@ -277,7 +277,7 @@ if __name__ == '__main__':
     encode_parser.add_argument('--label', type=str, help='Label for created blueprint')
     encode_parser.add_argument('--level', choices=[level.name.lower() for level in TransportBeltLevel], default='normal', help='Belt technology level to use')
 
-    decode_parser = subparsers.add_parser('decode', help='Convert blueprint to solver output format')
+    subparsers.add_parser('decode', help='Convert blueprint to solver output format')
 
     args = parser.parse_args()
 
@@ -294,3 +294,7 @@ if __name__ == '__main__':
             print(json.dumps(tiles.tolist()))
     else:
         assert False
+
+
+if __name__ == '__main__':
+    main()

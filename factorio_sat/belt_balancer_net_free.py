@@ -4,13 +4,13 @@ import math
 import sys
 import warnings
 
-import belt_balancer
-from direction import Direction
-import optimisations
-from cardinality import quadratic_amo, quadratic_one
-from solver import Grid
-from template import ArrayTemplate, BoolTemplate, EdgeMode, NumberTemplate, flatten
-from util import add_numbers, implies, literals_same, make_fixed_allocator, set_all_false, set_maximum, set_number, set_numbers_equal
+from . import belt_balancer
+from . import optimisations
+from .direction import Direction
+from .cardinality import quadratic_amo, quadratic_one
+from .solver import Grid
+from .template import ArrayTemplate, BoolTemplate, EdgeMode, NumberTemplate, flatten
+from .util import add_numbers, implies, literals_same, make_fixed_allocator, set_all_false, set_maximum, set_number, set_numbers_equal
 
 
 def lcm(*args):
@@ -362,7 +362,7 @@ def setup_balancer_ends(grid: Grid, input_count: int, output_count: int, aligned
                 grid.clauses += implies([end_offset], [start_offsets[i:(i + 1 + output_count - input_count)]])
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Creates n to n belt balancers')
     parser.add_argument('width', type=int, help='Belt balancer maximum width')
     parser.add_argument('height', type=int, help='Belt balancer maximum height')
@@ -403,3 +403,7 @@ if __name__ == '__main__':
         print(json.dumps(solution.tolist()))
         if not args.all:
             break
+
+
+if __name__ == '__main__':
+    main()

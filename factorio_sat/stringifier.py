@@ -4,9 +4,9 @@ import sys
 
 import numpy as np
 
-from blueprint import read_tile, write_tile
-from direction import Direction
-from tile import Belt, EmptyTile, Splitter, UndergroundBelt
+from .blueprint import read_tile, write_tile
+from .direction import Direction
+from .tile import Belt, EmptyTile, Splitter, UndergroundBelt
 
 
 def raw_print(data):
@@ -127,7 +127,7 @@ def decode(input_lines):
     return grid
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Converts grids to and from an ascii representation')
     parser.add_argument('mode', choices=['encode', 'decode'])
     args = parser.parse_args()
@@ -146,3 +146,7 @@ if __name__ == '__main__':
                     break
             grid = np.vectorize(write_tile)(decode(lines))
             print(json.dumps(grid.tolist()))
+
+
+if __name__ == '__main__':
+    main()

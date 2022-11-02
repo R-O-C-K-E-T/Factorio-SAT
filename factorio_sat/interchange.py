@@ -5,13 +5,13 @@ from typing import Iterable, List
 
 import numpy as np
 
-import belt_balancer
-from cardinality import library_atleast, library_equals
-from direction import Axis, Direction
-import optimisations
-from solver import Grid
-from template import EdgeMode
-from util import LiteralType, implies, invert_components, set_all_false, set_literal, set_not_number, set_number, set_numbers, set_numbers_equal
+from . import belt_balancer
+from . import optimisations
+from .cardinality import library_atleast, library_equals
+from .direction import Axis, Direction
+from .solver import Grid
+from .template import EdgeMode
+from .util import LiteralType, implies, invert_components, set_all_false, set_literal, set_not_number, set_number, set_numbers, set_numbers_equal
 
 
 def prevent_passing(grid: Grid):
@@ -165,7 +165,7 @@ def require_correct_transport_through_edges(grid: Grid):
         grid.clauses += library_equals(forward_flow + invert_components(backward_flow), grid.height + len(backward_edge), grid.pool)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Finds an interchange for building composite balancers')
     parser.add_argument('width', type=int, help='Interchange width')
     parser.add_argument('height', type=int, help='Combined balancer size')
@@ -242,3 +242,7 @@ if __name__ == '__main__':
         print(json.dumps(solution.tolist()))
         if not args.all:
             break
+
+
+if __name__ == '__main__':
+    main()

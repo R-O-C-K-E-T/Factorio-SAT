@@ -3,7 +3,7 @@ from typing import List, Optional
 from pysat.card import CardEnc, EncType
 from pysat.formula import IDPool
 
-from util import AllocatorType, ClauseList, LiteralType, bin_length, implies, set_number
+from .util import AllocatorType, ClauseList, LiteralType, bin_length, implies, set_number
 
 # AMO - At Most One
 

@@ -9,15 +9,14 @@ from typing import Tuple
 import numpy as np
 from pysat.solvers import Solver
 
-from tile import Belt, EmptyTile, Splitter, UndergroundBelt
-from util import bin_length, get_popcount, read_number, set_not_number
+from .tile import Belt, EmptyTile, Splitter, UndergroundBelt
+from .util import bin_length, get_popcount, read_number, set_not_number
+from . import blueprint
 
 try:
     from graphviz import Digraph
 except ModuleNotFoundError:
     print('"graphviz" not installed: network rendering will not work')
-
-import blueprint
 
 
 def create_benes_network(size):
@@ -684,7 +683,7 @@ def tidy_network(network):
     return network
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Manipulate belt balancer networks')
     subparsers = parser.add_subparsers(dest='mode', required=True)
 
@@ -747,3 +746,7 @@ if __name__ == '__main__':
 
         with args.output_network:
             save_network(args.output_network, out_network)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,12 +1,12 @@
 import argparse
 import json
 import sys
-from direction import Axis, Direction
 
-import optimisations
-import solver
-from template import EdgeMode, EdgeModeType
-from util import implies, increment_number, invert_components, set_all_false, set_number, set_numbers_equal
+from . import optimisations
+from . import solver
+from .direction import Axis, Direction
+from .template import EdgeMode, EdgeModeType
+from .util import implies, increment_number, invert_components, set_all_false, set_number, set_numbers_equal
 
 
 def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
@@ -62,7 +62,7 @@ def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
                 grid.clauses.append([-tile_a.underground[direction + 2], -tile_b.underground[direction + 2]])
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Creates a stream of blocks of random belts')
     parser.add_argument('width', type=int, help='Block width')
     parser.add_argument('height', type=int, help='Block height')
@@ -132,3 +132,7 @@ if __name__ == '__main__':
 
             if not args.all:
                 break
+
+
+if __name__ == '__main__':
+    main()

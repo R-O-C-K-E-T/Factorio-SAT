@@ -1,11 +1,11 @@
 from typing import List, Optional
 
 import numpy as np
-from direction import Direction
 
-from solver import Grid
-from template import EdgeMode, EdgeModeType
-from util import LiteralType, break_symmetry, implies, invert_components, set_literal, set_not_number
+from .direction import Direction
+from .solver import Grid
+from .template import EdgeMode, EdgeModeType
+from .util import LiteralType, break_symmetry, implies, invert_components, set_literal, set_not_number
 
 
 def prevent_empty_along_underground(grid: Grid, edge_mode: EdgeModeType):

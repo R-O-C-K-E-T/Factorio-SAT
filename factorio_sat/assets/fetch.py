@@ -141,14 +141,12 @@ def fetch_recipes(base_directory):
 
         data += entry
 
-    json.dump(data, open('temp.json', 'w'))
-
     for variant in ('normal', 'expensive'):
         with open(path.join(path.dirname(__file__), f'{variant}-recipes.json'), 'w') as f:
             json.dump(get_recipes_for_variant(data, variant), f)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Fetches Factorio tilemaps and recipes')
     parser.add_argument('path', type=str, nargs='?', help='Location of factorio installation')
     args = parser.parse_args()
@@ -166,7 +164,6 @@ if __name__ == '__main__':
         if not path.exists(steam_directory):
             raise RuntimeError('No steam installation found at: {}'.format(steam_directory))
         game_directory = path.join(steam_directory, 'steamapps', 'common', 'Factorio')
-        print(game_directory)
     else:
         game_directory = args.path
 
@@ -178,3 +175,7 @@ if __name__ == '__main__':
     fetch_tilemaps(base_directory)
     if ast is not None:
         fetch_recipes(base_directory)
+
+
+if __name__ == '__main__':
+    main()

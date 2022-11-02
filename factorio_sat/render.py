@@ -13,12 +13,11 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from pygame.locals import *
 
-import blueprint
-from direction import Direction
-from tile import AssemblingMachine, BaseTile, EmptyTile, Inserter
-import tilemaps
-from solver import Belt, Splitter, UndergroundBelt
-from util import *
+from . import blueprint
+from . import tilemaps
+from .direction import Direction
+from .tile import AssemblingMachine, BaseTile, EmptyTile, Inserter
+from .solver import Belt, Splitter, UndergroundBelt
 
 BELT_ANIMATION_LENGTH = 16
 SPLITTER_ANIMATION_LENGTH = 32
@@ -498,8 +497,7 @@ def export_video(frames, filename):
     process.stdin.close()
     process.wait()
 
-
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Renders a grid of tiles from standard input')
     parser.add_argument('--hide-colour', action='store_true', help='Disables colouring the tiles based on their given colour')
     parser.add_argument('--show-underground', action='store_true', help='Shows the underground tile connections')
@@ -520,7 +518,7 @@ if __name__ == '__main__':
         return max(solution.shape[1] * args.cell_size + padding_pixels, 1), max(solution.shape[0] * args.cell_size + padding_pixels, 1)
 
     def increment_solution(amount):
-        global index, framebuffers, input_closed
+        nonlocal index, framebuffers, input_closed
 
         assert abs(amount) == 1
         index += amount
@@ -548,7 +546,7 @@ if __name__ == '__main__':
     print(dt)
     if solution is None:
         print('No solutions')
-        exit()
+        return
     solutions = [solution]
 
     # print(solution.shape)
@@ -680,3 +678,7 @@ if __name__ == '__main__':
             t += 1
     finally:
         pygame.quit()
+
+
+if __name__ == '__main__':
+    main()

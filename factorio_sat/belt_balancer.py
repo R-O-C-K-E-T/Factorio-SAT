@@ -4,16 +4,16 @@ from typing import Sequence
 
 from pysat.card import EncType
 import numpy as np
-from direction import Direction
 
-import optimisations
-import blueprint
-from cardinality import library_atleast, library_equals, quadratic_one
-from network import deduplicate_network, get_input_output_colours, open_network
-from solver import Belt, Grid, TileTemplate
-from template import EdgeMode, OneHotTemplate
-from tile import EmptyTile
-from util import implies, invert_components, literals_different, set_all_false, set_number, set_numbers
+from .direction import Direction
+from . import optimisations
+from . import blueprint
+from .cardinality import library_atleast, library_equals, quadratic_one
+from .network import deduplicate_network, get_input_output_colours, open_network
+from .solver import Belt, Grid, TileTemplate
+from .template import EdgeMode, OneHotTemplate
+from .tile import EmptyTile
+from .util import implies, invert_components, literals_different, set_all_false, set_number, set_numbers
 
 
 def setup_balancer_ends_with_offsets(grid, network, start_offset: int, end_offset: int):
@@ -262,7 +262,7 @@ def set_nonempty_tiles(grid: Grid, blueprint_or_json: str):
             grid.set_tile(col, row, tile)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
     parser.add_argument('network', type=argparse.FileType('r'), help='Splitter network')
     parser.add_argument('width', type=int, help='Belt balancer maximum width')
@@ -358,3 +358,7 @@ if __name__ == '__main__':
         print(json.dumps(solution.tolist()))
         if not args.all:
             break
+
+
+if __name__ == '__main__':
+    main()

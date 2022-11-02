@@ -14,9 +14,9 @@ import numpy as np
 from pysat.formula import CNF, IDPool
 from pysat.solvers import Solver
 
-from ipasir import IPASIRLibrary
-from tile import BaseTile
-from util import ClauseList, LiteralType, read_number
+from .ipasir import IPASIRLibrary
+from .tile import BaseTile
+from .util import ClauseList, LiteralType, read_number
 
 
 class EdgeMode(enum.Enum):
