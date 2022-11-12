@@ -1,7 +1,9 @@
+import unittest
 import re
+from os import path
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 from factorio_sat import belt_balancer
 from factorio_sat import optimisations
@@ -14,7 +16,7 @@ TEST_EDGE_START = '┌'
 TEST_EDGE_MIDDLE = '│'
 TEST_EDGE_STOP = '└'
 TEST_EDGES = {TEST_EDGE_START, TEST_EDGE_MIDDLE, TEST_EDGE_STOP}
-SUITE_FILENAME = 'test_suite'
+SUITE_FILENAME = path.join(path.dirname(__file__), 'end_to_end_suite')
 
 
 def remap_characters(filename: str, mapping: Dict[str, str]):
@@ -33,14 +35,18 @@ def remap_characters(filename: str, mapping: Dict[str, str]):
             f.write('\n')
 
 
-@dataclass
-class TestCase:
-    index: int
-    params: Dict[str, str]
-    is_positive: bool
-    tiles: Any
+class TestCase(unittest.TestCase):
+    def __init__(self, name: str, params: Dict[str, str], is_positive: bool, tiles: Any) -> None:
+        super().__init__('run_test')
+        self.name = name
+        self.params = params
+        self.is_positive = is_positive
+        self.tiles = tiles
 
-    def run(self):
+    def __str__(self) -> str:
+        return self.name
+
+    def run_test(self):
         underground_length = int(self.params.get('underground-length', 4))
 
         edges = self.params.get('edges', 'ignore')
@@ -91,39 +97,8 @@ class TestCase:
         for y, row in enumerate(self.tiles):
             for x, tile in enumerate(row):
                 grid.set_tile(x, y, tile)
-        return grid.check() == self.is_positive
 
-
-@dataclass
-class TestSuite:
-    label: str
-    sub_suites: List['TestSuite']
-    cases: List[TestCase]
-
-    def run(self, indent=-1):
-        passed = 0
-        failed = 0
-
-        if self.label is not None:
-            print('  ' * indent + self.label)
-        for suite in self.sub_suites:
-            sub_passed, sub_failed = suite.run(indent + 1)
-            passed += sub_passed
-            failed += sub_failed
-
-        fail_list = []
-        for i, test in enumerate(self.cases):
-            if test.run():
-                passed += 1
-            else:
-                failed += 1
-                fail_list.append(i + 1)
-
-        failed_str = ''
-        if len(fail_list) != 0:
-            failed_str = ' (' + ','.join(map(str, fail_list)) + ')'
-        print('  ' * (indent + 1) + f'{passed} passed, {failed} failed' + failed_str)
-        return passed, failed
+        self.assertEqual(grid.check(), self.is_positive)
 
 
 @dataclass(frozen=True)
@@ -180,9 +155,9 @@ def open_suite(filename: str):
     tokens = tokenise(lines)
 
     stack = []
-    stack_entry = namedtuple('stack_entry', ['label', 'params', 'is_positive', 'test_cases', 'sub_blocks'])
+    stack_entry = namedtuple('stack_entry', ['label', 'params', 'is_positive', 'test_cases'])
 
-    result = TestSuite(None, [], [])
+    result = unittest.TestSuite()
     for token in tokens:
         if token.name == 'open':
             label, params, is_positive = token.data
@@ -191,30 +166,32 @@ def open_suite(filename: str):
                     is_positive = stack[-1].is_positive
                 params = {**stack[-1].params, **params}
 
-            stack.append(stack_entry(label, params, is_positive, [], []))
+            stack.append(stack_entry(label, params, is_positive, []))
         elif token.name == 'close':
             if len(stack) == 0:
                 raise RuntimeError(f'Block end token at line {token.lineno} does not have a corresponding test block')
             last = stack.pop()
-            test_block = TestSuite(last.label, last.sub_blocks, last.test_cases)
+            test_block = unittest.TestSuite(last.test_cases)
             if len(stack) == 0:
-                result.sub_suites.append(test_block)
+                result.addTest(test_block)
             else:
-                stack[-1].sub_blocks.append(test_block)
+                stack[-1].test_cases.append(test_block)
         elif token.name == 'test':
             if len(stack) == 0:
                 raise RuntimeError(f'Test at line {token.lineno} does not have a surrounding test block')
             last = stack[-1]
             if last.is_positive is None:
                 raise RuntimeError(f'Test at line {token.lineno} does is neither positive nor negative')
-            last.test_cases.append(TestCase(len(last.test_cases) + 1, last.params, last.is_positive, token.data))
-
+            test_name = '.'.join([item.label for item in stack]) + f'[{len(last.test_cases)}]'
+            last.test_cases.append(TestCase(test_name, last.params, last.is_positive, token.data))
     return result
 
 
-if __name__ == '__main__':
-    # remap_characters(SUITE_FILENAME, {})
+def load_tests(loader: unittest.TestLoader, standard_tests: Iterable[unittest.TestCase], pattern: str):
     suite = open_suite(SUITE_FILENAME)
-    _, failed = suite.run()
-    if failed != 0:
-        exit(1)
+    suite.addTests(standard_tests)
+    return suite
+
+
+if __name__ == '__main__':
+    unittest.main()

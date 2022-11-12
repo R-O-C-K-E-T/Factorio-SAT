@@ -330,27 +330,33 @@ def calculate_network_size(network):
 
 
 def open_network(file):
+    require_close = False
     if isinstance(file, str):
+        require_close = True
         file = open(file)
 
-    network = []
-    for line in file.readlines():
-        line = line.strip()
-        if len(line) == 0:
-            continue
+    try:
+        network = []
+        for line in file.readlines():
+            line = line.strip()
+            if len(line) == 0:
+                continue
 
-        if line.startswith('#'):
-            continue
+            if line.startswith('#'):
+                continue
 
-        colours = [int(colour) for colour in line.split()]
+            colours = [int(colour) for colour in line.split()]
 
-        for i, colour in enumerate(colours):
-            if colour == -1:
-                colours[i] = None
+            for i, colour in enumerate(colours):
+                if colour == -1:
+                    colours[i] = None
 
-        if len(colours) != 4:
-            raise ValueError('Invalid file')
-        network.append((tuple(colours[:2]), tuple(colours[2:])))
+            if len(colours) != 4:
+                raise ValueError('Invalid file')
+            network.append((tuple(colours[:2]), tuple(colours[2:])))
+    finally:
+        if require_close:
+            file.close()
     return network
 
 
