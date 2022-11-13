@@ -30,8 +30,8 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
         grid.clauses += implies([tile.is_splitter, -tile.is_splitter_head], quadratic_one(tile.level))
         grid.clauses += implies([-tile.is_splitter], set_all_false(tile.level))
 
-        grid.clauses += implies([tile.is_splitter_head], set_numbers_equal(tile.level, tile.level_primary))
-        grid.clauses += implies([-tile.is_splitter_head], set_all_false(tile.level_primary))
+        grid.clauses += implies([tile.is_splitter], set_numbers_equal(tile.level, tile.level_primary))
+        grid.clauses += implies([-tile.is_splitter], set_all_false(tile.level_primary))
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -86,6 +86,10 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
         for bit_a, bit_b in zip(tile_a.colour, tile_b.colour):
             grid.clauses += literals_different(bit_a, bit_b)
 
+    checkerboard_tiles = [grid.get_tile_instance(x, y) for y in range(grid.height) for x in range(grid.width) if (x + y) % 2]
+    for i in range(int(math.log2(height)) - 2):
+        grid.clauses += library_equals([tile.level_primary[i] for tile in checkerboard_tiles], height // 2, grid.pool)
+
     return grid
 
 
@@ -113,9 +117,6 @@ def main():
 
     optimisations.expand_underground(grid, min_x=1, max_x=grid.width - 2)
     optimisations.apply_generic_optimisations(grid)
-
-    for i in range(int(math.log2(args.size)) - 2):
-        grid.clauses += library_equals([tile.level_primary[i] for tile in grid.iterate_tiles()], args.size // 2, grid.pool)
 
     if args.partial is not None:
         with args.partial:

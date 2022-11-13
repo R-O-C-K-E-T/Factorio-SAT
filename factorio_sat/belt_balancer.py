@@ -124,6 +124,9 @@ def create_balancer(network, width: int, height: int, underground_length: int) -
     grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
     grid.prevent_bad_colouring(EdgeMode.NO_WRAP)
 
+    checkerboard = [grid.get_tile_instance(x, y).is_splitter for x in range(grid.width) for y in range(grid.height) if (x + y) % 2]
+    grid.clauses += library_equals(checkerboard, sum(network.values()), grid.pool)
+
     # There is exactly one splitter of each type
     for i, count in enumerate(network.values()):
         literals = [grid.get_tile_instance(x, y).node[i] for x in range(grid.width) for y in range(grid.height)]
