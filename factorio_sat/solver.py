@@ -249,7 +249,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                         set_numbers_equal(quantity_ua, quantity_b))
 
     def prevent_bad_colouring(self, edge_mode: EdgeModeType):
-        if self.colours == 1:
+        if self.colours in (1, None):
             return
         self.transport_quantity(lambda tile: tile.colour, lambda tile: tile.colour_ux, lambda tile: tile.colour_uy, edge_mode)
 
