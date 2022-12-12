@@ -6,7 +6,6 @@ import numpy as np
 from factorio_sat import solver
 from factorio_sat.template import CompositeTemplateParams, EdgeMode
 from factorio_sat import stringifier
-from factorio_sat import tile
 from factorio_sat import blueprint
 
 
@@ -20,14 +19,23 @@ class InvalidSolutionError(AssertionError):
     def __str__(self) -> str:
         return '\n' + self.solution_str
 
+
 class BaseGridTest(unittest.TestCase):
     grid: solver.Grid
-    
+
     def __init__(self, methodName: str = ...) -> None:
         super().__init__(methodName)
         self.grid = None
 
-    def make_grid(self, width: int, height: int, colours: Optional[int] = None, underground_length: int = float('inf'), extras: CompositeTemplateParams = {}, enforce_basic_rules=True):
+    def make_grid(
+            self,
+            width: int,
+            height: int,
+            colours: Optional[int] = None,
+            underground_length: int = float('inf'),
+            extras: CompositeTemplateParams = {},
+            enforce_basic_rules=True
+    ):
         self.grid = solver.Grid(width, height, colours, underground_length, extras)
         if enforce_basic_rules:
             self.enforce_basic_rules()

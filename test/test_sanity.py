@@ -2,6 +2,7 @@ from factorio_sat import tile
 from factorio_sat.direction import Direction
 from test.grid_test_case import BaseGridTest
 
+
 class TestSanity(BaseGridTest):
     def setUp(self):
         super().setUp()

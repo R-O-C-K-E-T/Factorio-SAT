@@ -5,7 +5,7 @@ from pysat.formula import IDPool
 from .cardinality import quadratic_amo, quadratic_one
 from .direction import Axis, Direction
 from .template import (ArrayTemplate, BoolTemplate, CompositeTemplate, CompositeTemplateParams, EdgeMode,
-                      EdgeModeType, FactorioGrid, NestedArray, NumberTemplate, OneHotTemplate, flatten)
+                       EdgeModeType, FactorioGrid, NestedArray, NumberTemplate, OneHotTemplate, flatten)
 from .tile import BaseTile, Belt, EmptyTile, Splitter, UndergroundBelt
 from .util import LiteralType, implies, invert_components, literals_same, set_all_false, set_literal, set_maximum, set_not_number, set_number, set_numbers_equal
 
@@ -50,7 +50,14 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
             'input_direction': OneHotTemplate(4),
             'output_direction': OneHotTemplate(4),
             'underground': ArrayTemplate(BoolTemplate(), (4,)),
-            'type': lambda is_belt, is_empty, is_splitter, is_underground_in, is_underground_out: [is_belt, is_empty, is_splitter, is_underground_in, is_underground_out],
+            'type': lambda is_belt, is_empty, is_splitter, is_underground_in, is_underground_out:
+            [
+                is_belt,
+                is_empty,
+                is_splitter,
+                is_underground_in,
+                is_underground_out,
+            ],
             'all_direction': lambda input_direction, output_direction: [*input_direction, *output_direction],
         }
         if colours is not None:
@@ -71,7 +78,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
         for tile in self.iterate_tiles():
             # Each tile has exactly one type
             self.clauses += quadratic_one(tile.type)
-            
+
             # Empty tiles must not have any inputs/outputs
             self.clauses += implies([tile.is_empty], set_all_false(tile.all_direction))
             # Belts must have inputs and outputs
@@ -151,7 +158,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                 self.clauses.append([tile_instance.is_belt])
             elif isinstance(tile, UndergroundBelt):
                 self.clauses.append([tile_instance.is_underground_in if tile.is_input else tile_instance.is_underground_out])
-            
+
             if tile.input_direction is not None:
                 self.clauses += [[tile_instance.input_direction[tile.input_direction]]]
 
@@ -324,10 +331,12 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                     tile_a = self.get_tile_instance(x, y)
 
                     # Underground entrance/exit cannot be above underground segment with same direction
-                    self.clauses += implies([tile_a.is_underground_in, tile_a.input_direction[direction]],
+                    self.clauses += implies(
+                        [tile_a.is_underground_in, tile_a.input_direction[direction]],
                         [[-tile_a.underground[direction]], [-tile_a.underground[reverse_dir]]]
                     )
-                    self.clauses += implies([tile_a.is_underground_out, tile_a.output_direction[direction]],
+                    self.clauses += implies(
+                        [tile_a.is_underground_out, tile_a.output_direction[direction]],
                         [[-tile_a.underground[direction]], [-tile_a.underground[reverse_dir]]]
                     )
 
@@ -343,7 +352,8 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                     # Underground segment must propagate or have output
                     tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
                     if tile_b is not None:
-                        self.clauses += implies([tile_a.underground[direction], -tile_b.underground[direction]],
+                        self.clauses += implies(
+                            [tile_a.underground[direction], -tile_b.underground[direction]],
                             [
                                 [tile_b.is_underground_out],
                                 [tile_b.output_direction[direction]],

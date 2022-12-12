@@ -1,9 +1,7 @@
-import unittest
-
 from factorio_sat import belt_balancer_net_free_power_of_2
 from factorio_sat.template import EdgeMode
-from factorio_sat import optimisations
 from test.grid_test_case import BaseGridTest
+
 
 class TestBeltBalancerNetFreePowerOf2(BaseGridTest):
     def test_existing_14_wide_16_to_16(self):
