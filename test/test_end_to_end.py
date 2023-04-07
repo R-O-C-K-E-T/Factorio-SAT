@@ -58,39 +58,39 @@ class TestCase(unittest.TestCase):
             network = deduplicate_network(network)
             grid = belt_balancer.create_balancer(network, self.tiles.shape[1], self.tiles.shape[0], underground_length)
         else:
-            grid = Grid(self.tiles.shape[1], self.tiles.shape[0], 1, underground_length)
-            grid.prevent_bad_undergrounding(edge_mode)
+            grid = Grid(self.tiles.shape[1], self.tiles.shape[0], 1, underground_length, edge_mode=edge_mode)
+            grid.prevent_bad_undergrounding()
 
         rule = self.params.get('rule')
         if rule is not None:
             if rule == 'expand-underground':
                 optimisations.expand_underground(grid)
             elif rule == 'prevent-mergeable-underground':
-                optimisations.prevent_mergeable_underground(grid, edge_mode)
+                optimisations.prevent_mergeable_underground(grid)
             elif rule == 'glue-splitters':
                 optimisations.glue_splitters(grid)
             elif rule == 'prevent-belt-hooks':
-                optimisations.prevent_belt_hooks(grid, edge_mode)
+                optimisations.prevent_belt_hooks(grid)
             elif rule == 'prevent-small-loops':
                 optimisations.prevent_small_loops(grid)
             elif rule == 'prevent-semicircles':
-                optimisations.prevent_semicircles(grid, edge_mode)
+                optimisations.prevent_semicircles(grid)
             elif rule == 'prevent-underground-hook':
-                optimisations.prevent_underground_hook(grid, edge_mode)
+                optimisations.prevent_underground_hook(grid)
             elif rule == 'prevent-zigzags':
-                optimisations.prevent_zigzags(grid, edge_mode)
+                optimisations.prevent_zigzags(grid)
             elif rule == 'break-symmetry':
                 optimisations.break_vertical_symmetry(grid)
             elif rule == 'prevent-belt-parallel-splitter':
-                optimisations.prevent_belt_parallel_splitter(grid, edge_mode)
+                optimisations.prevent_belt_parallel_splitter(grid)
             elif rule == 'glue-partial-splitters':
-                optimisations.glue_partial_splitters(grid, edge_mode)
+                optimisations.glue_partial_splitters(grid)
             else:
                 raise RuntimeError(f'Unknown rule "{rule}"')
 
-        grid.enforce_maximum_underground_length(edge_mode)
+        grid.enforce_maximum_underground_length()
 
-        grid.prevent_intersection(edge_mode)
+        grid.prevent_intersection()
         if edges == 'block':
             grid.block_belts_through_edges()
             grid.block_underground_through_edges()

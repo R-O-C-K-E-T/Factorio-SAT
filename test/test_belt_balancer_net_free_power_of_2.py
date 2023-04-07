@@ -1,5 +1,4 @@
 from factorio_sat import belt_balancer_net_free_power_of_2
-from factorio_sat.template import EdgeMode
 from test.grid_test_case import BaseGridTest
 
 
@@ -7,8 +6,8 @@ class TestBeltBalancerNetFreePowerOf2(BaseGridTest):
     def test_existing_14_wide_16_to_16(self):
         self.grid = belt_balancer_net_free_power_of_2.create_balancer(14, 16, 8)
         self.grid.block_belts_through_edges((False, True))
-        self.grid.prevent_intersection(EdgeMode.NO_WRAP)
-        self.grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
+        self.grid.prevent_intersection()
+        self.grid.enforce_maximum_underground_length()
         self.set_content('''
 ┌───────────────────────────┐
 │→ → → f G l   G → D → f L →│
@@ -34,8 +33,8 @@ class TestBeltBalancerNetFreePowerOf2(BaseGridTest):
     def test_existing_15_wide_16_to_16(self):
         self.grid = belt_balancer_net_free_power_of_2.create_balancer(15, 16, 8)
         self.grid.block_belts_through_edges((False, True))
-        self.grid.prevent_intersection(EdgeMode.NO_WRAP)
-        self.grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
+        self.grid.prevent_intersection()
+        self.grid.enforce_maximum_underground_length()
         self.set_content('''
 ┌─────────────────────────────┐
 │→ → → f H t G → D → f G → → →│
@@ -61,15 +60,15 @@ class TestBeltBalancerNetFreePowerOf2(BaseGridTest):
     def test_unsat_9_wide_8_to_8(self):
         self.grid = belt_balancer_net_free_power_of_2.create_balancer(9, 8, 8)
         self.grid.block_belts_through_edges((False, True))
-        self.grid.prevent_intersection(EdgeMode.NO_WRAP)
-        self.grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
+        self.grid.prevent_intersection()
+        self.grid.enforce_maximum_underground_length()
         self.assert_unsat()
 
     def test_sat_10_wide_8_to_8(self):
         self.grid = belt_balancer_net_free_power_of_2.create_balancer(10, 8, 4)
         self.grid.block_belts_through_edges((False, True))
-        self.grid.prevent_intersection(EdgeMode.NO_WRAP)
-        self.grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
+        self.grid.prevent_intersection()
+        self.grid.enforce_maximum_underground_length()
         self.set_content('''
 ┌───────────────────┐
 │→ → → → → f G → → →│

@@ -30,13 +30,16 @@ class TileTemplate(Protocol):
 
 
 class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
-    def __init__(self,
-                 width: int,
-                 height: int,
-                 colours: Optional[int],
-                 underground_length: int = 4,
-                 extras: CompositeTemplateParams = {},
-                 pool: Optional[IDPool] = None):
+    def __init__(
+            self,
+            width: int,
+            height: int,
+            colours: Optional[int],
+            underground_length: int = 4,
+            extras: CompositeTemplateParams = {},
+            pool: Optional[IDPool] = None,
+            edge_mode: EdgeModeType = EdgeMode.NO_WRAP
+    ):
         assert colours is None or colours >= 1
         assert underground_length >= 0
         self.colours = colours
@@ -77,7 +80,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
         template.update(extras)
         template = CompositeTemplate(template)
 
-        super().__init__(template, width, height, pool)
+        super().__init__(template, width, height, pool=pool, edge_mode=edge_mode)
 
         for tile in self.iterate_tiles():
             # Each tile has exactly one type
@@ -128,7 +131,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
 
         for direction in Direction:
             inv_direction = direction.reverse
-            for tile_a, tile_b in self.iterate_tile_lines(direction.next.vec, 2, EdgeMode.NO_WRAP):
+            for tile_a, tile_b in self.iterate_tile_lines(direction.next.vec, 2):
                 if tile_b is None:  # Prevent splitter overlapping edge of grid
                     self.clauses += [
                         [-tile_a.input_direction[direction],      -tile_a.is_splitter, -tile_a.is_splitter_head],
@@ -285,14 +288,13 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
     def transport_quantity(self,
                            quantity: Callable[[TileTemplate], NestedArray[LiteralType]],
                            quantity_ux: Callable[[TileTemplate], NestedArray[LiteralType]],
-                           quantity_uy: Callable[[TileTemplate], NestedArray[LiteralType]],
-                           edge_mode: EdgeModeType):
+                           quantity_uy: Callable[[TileTemplate], NestedArray[LiteralType]]):
         for direction in Direction:
             dx, dy = direction.vec
             for x in range(self.width):
                 for y in range(self.height):
                     tile_a = self.get_tile_instance(x, y)
-                    tile_b = self.get_tile_instance_offset(x, y, dx, dy, edge_mode)
+                    tile_b = self.get_tile_instance_offset(x, y, dx, dy)
 
                     if tile_b is None:
                         continue
@@ -329,10 +331,10 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                         ],
                         set_numbers_equal(quantity_ua, quantity_b))
 
-    def prevent_bad_colouring(self, edge_mode: EdgeModeType):
+    def prevent_bad_colouring(self):
         if self.colours in (1, None):
             return
-        self.transport_quantity(lambda tile: tile.colour, lambda tile: tile.colour_ux, lambda tile: tile.colour_uy, edge_mode)
+        self.transport_quantity(lambda tile: tile.colour, lambda tile: tile.colour_ux, lambda tile: tile.colour_uy)
 
     def block_underground_through_edges(self, edges: Union[bool, Tuple[bool, bool], Tuple[bool, bool, bool, bool]] = True):
         if isinstance(edges, bool):
@@ -403,7 +405,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                 self.clauses.append([-tile.input_direction[3], *tile.output_direction])
                 self.clauses.append([-tile.output_direction[1], *tile.input_direction])
 
-    def prevent_bad_undergrounding(self, edge_mode: EdgeModeType):
+    def prevent_bad_undergrounding(self):
         for direction in Direction:
             reverse_dir = direction.reverse
 
@@ -423,16 +425,16 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                     )
 
                     # Underground entrance/exit must have a underground segment after/before it
-                    tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
+                    tile_b = self.get_tile_instance_offset(x, y, +dx, +dy)
                     if tile_b is not None:
                         self.clauses += implies([tile_a.is_underground_in, tile_a.input_direction[direction]], [[tile_b.underground[direction]]])
 
-                    tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
+                    tile_b = self.get_tile_instance_offset(x, y, -dx, -dy)
                     if tile_b is not None:
                         self.clauses += implies([tile_a.is_underground_out, tile_a.output_direction[direction]], [[tile_b.underground[direction]]])
 
                     # Underground segment must propagate or have output
-                    tile_b = self.get_tile_instance_offset(x, y, +dx, +dy, edge_mode)
+                    tile_b = self.get_tile_instance_offset(x, y, +dx, +dy)
                     if tile_b is not None:
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]],
@@ -442,7 +444,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                             ]
                         )
 
-                    tile_b = self.get_tile_instance_offset(x, y, -dx, -dy, edge_mode)
+                    tile_b = self.get_tile_instance_offset(x, y, -dx, -dy)
                     if tile_b is not None:
                         self.clauses += implies(
                             [tile_a.underground[direction], -tile_b.underground[direction]],
@@ -452,7 +454,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                             ]
                         )
 
-    def enforce_maximum_underground_length(self, edge_mode: EdgeModeType):
+    def enforce_maximum_underground_length(self):
         assert self.underground_length >= 1
 
         if self.underground_length == float('inf'):
@@ -464,7 +466,7 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                 for y in range(self.height):
                     clause = []
                     for i in range(self.underground_length + 1):
-                        tile = self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
+                        tile = self.get_tile_instance_offset(x, y, dx * i, dy * i)
 
                         if tile is None:
                             break
@@ -473,9 +475,9 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                     else:
                         self.clauses.append(clause)
 
-    def prevent_intersection(self, edge_mode: EdgeModeType):
+    def prevent_intersection(self):
         for direction in Direction:
-            for tile_a, tile_b in self.iterate_tile_lines(direction.vec, 2, edge_mode):
+            for tile_a, tile_b in self.iterate_tile_lines(direction.vec, 2):
                 if tile_b is None:
                     continue
 

@@ -4,11 +4,10 @@ import numpy as np
 
 from .direction import Direction
 from .solver import Grid
-from .template import EdgeMode, EdgeModeType
 from .util import LiteralType, break_symmetry, implies, invert_components, set_literal
 
 
-def prevent_empty_along_underground(grid: Grid, edge_mode: EdgeModeType):
+def prevent_empty_along_underground(grid: Grid):
     underground_length = min(grid.underground_length, max(grid.width, grid.height) - 2)
 
     for direction in Direction:
@@ -17,7 +16,7 @@ def prevent_empty_along_underground(grid: Grid, edge_mode: EdgeModeType):
             for y in range(grid.height):
                 tiles = [grid.get_tile_instance(x, y)]
                 for i in range(1, underground_length + 2):
-                    new_tile = grid.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode)
+                    new_tile = grid.get_tile_instance_offset(x, y, dx * i, dy * i)
                     if new_tile is None:
                         break
 
@@ -89,8 +88,8 @@ def glue_splitters(grid: Grid):
                 dx0, dy0 = direction.vec
                 dx1, dy1 = direction.next.vec
 
-                tile_in0 = grid.get_tile_instance_offset(x, y, -dx0, -dy0, EdgeMode.NO_WRAP)
-                tile_in1 = grid.get_tile_instance_offset(x, y, -dx0 + dx1, -dy0 + dy1, EdgeMode.NO_WRAP)
+                tile_in0 = grid.get_tile_instance_offset(x, y, -dx0, -dy0)
+                tile_in1 = grid.get_tile_instance_offset(x, y, -dx0 + dx1, -dy0 + dy1)
 
                 if tile_in0 is None or tile_in1 is None:
                     continue
@@ -109,14 +108,14 @@ def glue_splitters(grid: Grid):
                 ])
 
 
-def shrink_underground(grid: Grid, edge_mode: EdgeModeType):
+def shrink_underground(grid: Grid):
     # Has some correctness problems
     for x in range(grid.width):
         for y in range(grid.height):
             tile_a = grid.get_tile_instance(x, y)
             for direction in Direction:
                 dx0, dy0 = direction.vec
-                tile_b = grid.get_tile_instance_offset(x, y, dx0, dy0, edge_mode)
+                tile_b = grid.get_tile_instance_offset(x, y, dx0, dy0)
                 if tile_b is None:
                     continue
 
@@ -147,7 +146,7 @@ def expand_underground_infinite(grid: Grid, min_x: int = 0, min_y: int = 0, max_
                 if far_x > max_x or far_y > max_y or far_x < min_x or far_y < min_y:
                     continue
 
-                tiles = [grid.get_tile_instance_offset(x, y, dx * i, dy * i, EdgeMode.NO_WRAP) for i in range(2)]
+                tiles = [grid.get_tile_instance_offset(x, y, dx * i, dy * i) for i in range(2)]
                 assert all(tile is not None for tile in tiles)
 
                 # Prevent: Belt, Input Underground
@@ -192,7 +191,7 @@ def expand_underground(grid: Grid, min_x: int = 0, min_y: int = 0, max_x: Option
                     if far_x > max_x or far_y > max_y or far_x < min_x or far_y < min_y:
                         continue
 
-                    tiles = [grid.get_tile_instance_offset(x, y, dx * i, dy * i, EdgeMode.NO_WRAP) for i in range(underground_length + 2)]
+                    tiles = [grid.get_tile_instance_offset(x, y, dx * i, dy * i) for i in range(underground_length + 2)]
                     assert all(tile is not None for tile in tiles)
 
                     # BI--O
@@ -222,7 +221,7 @@ def expand_underground(grid: Grid, min_x: int = 0, min_y: int = 0, max_x: Option
                     ])
 
 
-def prevent_belt_hooks(grid: Grid, edge_mode: EdgeModeType):
+def prevent_belt_hooks(grid: Grid):
     for x in range(grid.width):
         for y in range(grid.height):
             tile00 = grid.get_tile_instance(x, y)
@@ -232,9 +231,9 @@ def prevent_belt_hooks(grid: Grid, edge_mode: EdgeModeType):
 
                     dx0, dy0 = direction.vec
                     dx1, dy1 = tangent.vec
-                    tile01 = grid.get_tile_instance_offset(x, y, dx0, dy0, edge_mode)
-                    tile10 = grid.get_tile_instance_offset(x, y, dx1, dy1, edge_mode)
-                    tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, edge_mode)
+                    tile01 = grid.get_tile_instance_offset(x, y, dx0, dy0)
+                    tile10 = grid.get_tile_instance_offset(x, y, dx1, dy1)
+                    tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1)
 
                     if any(tile is None for tile in (tile01, tile10, tile11)):
                         continue
@@ -270,7 +269,7 @@ def get_mergeable_underground_variations(underground_length: int):
         ]
 
 
-def prevent_mergeable_underground(grid: Grid, edge_mode: EdgeModeType):
+def prevent_mergeable_underground(grid: Grid):
     max_underground_length = min(grid.underground_length, max(grid.width, grid.height) - 2)
 
     for underground_length in range(4, max_underground_length + 1):
@@ -278,7 +277,7 @@ def prevent_mergeable_underground(grid: Grid, edge_mode: EdgeModeType):
             for y in range(grid.height):
                 for direction in Direction:
                     dx, dy = direction.vec
-                    tiles = [grid.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode) for i in range(underground_length + 2)]
+                    tiles = [grid.get_tile_instance_offset(x, y, dx * i, dy * i) for i in range(underground_length + 2)]
                     if any(tile is None for tile in tiles):
                         continue
 
@@ -286,7 +285,7 @@ def prevent_mergeable_underground(grid: Grid, edge_mode: EdgeModeType):
                         grid.clauses.append([-set_literal(tile.underground[direction], is_underground) for tile, is_underground in zip(tiles, variation)])
 
 
-def prevent_semicircles(grid: Grid, edge_mode: EdgeModeType):
+def prevent_semicircles(grid: Grid):
     for x in range(grid.width):
         for y in range(grid.height):
             for direction in Direction:
@@ -294,7 +293,7 @@ def prevent_semicircles(grid: Grid, edge_mode: EdgeModeType):
                     inverse_tangent = tangent.reverse
                     dx0, dy0 = direction.vec
                     dx1, dy1 = tangent.vec
-                    func = np.frompyfunc(lambda j, i: grid.get_tile_instance_offset(x, y, dx0 * i + dx1 * j, dy0 * i + dy1 * j, edge_mode), 2, 1)
+                    func = np.frompyfunc(lambda j, i: grid.get_tile_instance_offset(x, y, dx0 * i + dx1 * j, dy0 * i + dy1 * j), 2, 1)
                     tiles = func(*np.ogrid[0:2, 0:3])
 
                     if (tiles == None).any():
@@ -321,7 +320,7 @@ def prevent_semicircles(grid: Grid, edge_mode: EdgeModeType):
                             ])
 
 
-def prevent_underground_hook(grid: Grid, edge_mode: EdgeModeType):
+def prevent_underground_hook(grid: Grid):
     # TODO Make sound
     for x in range(grid.width):
         for y in range(grid.height):
@@ -329,11 +328,11 @@ def prevent_underground_hook(grid: Grid, edge_mode: EdgeModeType):
             for direction in Direction:
                 dx0, dy0 = direction.vec
 
-                tile_empty = grid.get_tile_instance_offset(x, y, dx0, dy0, edge_mode)
+                tile_empty = grid.get_tile_instance_offset(x, y, dx0, dy0)
                 if tile_empty is None:
                     continue
 
-                tile_a = grid.get_tile_instance_offset(x, y, -dx0, -dy0, edge_mode)
+                tile_a = grid.get_tile_instance_offset(x, y, -dx0, -dy0)
                 if tile_a is None:
                     continue
 
@@ -343,10 +342,10 @@ def prevent_underground_hook(grid: Grid, edge_mode: EdgeModeType):
                     inv_tangent = tangent.reverse
                     dx1, dy1 = tangent.vec
 
-                    tile_b = grid.get_tile_instance_offset(x, y, -dx1 - dx0, -dy1 - dy0, edge_mode)
+                    tile_b = grid.get_tile_instance_offset(x, y, -dx1 - dx0, -dy1 - dy0)
                     if tile_b is None:
                         continue
-                    tile_c = grid.get_tile_instance_offset(x, y, -dx1, -dy1, edge_mode)
+                    tile_c = grid.get_tile_instance_offset(x, y, -dx1, -dy1)
                     if tile_c is None:
                         continue
 
@@ -387,11 +386,11 @@ def prevent_underground_hook(grid: Grid, edge_mode: EdgeModeType):
                         ])
 
 
-def prevent_zigzags(grid: Grid, edge_mode: EdgeModeType):
+def prevent_zigzags(grid: Grid):
     # TODO Make sound
     for direction in Direction:
         for tangent in (direction.next, direction.prev):
-            for tiles in grid.iterate_tile_blocks(direction.vec, 2, tangent.vec, 2, edge_mode):
+            for tiles in grid.iterate_tile_blocks(direction.vec, 2, tangent.vec, 2):
                 if (tiles == None).any():
                     continue
 
@@ -456,7 +455,7 @@ def prevent_spirals(grid: Grid):
         inv_direction = direction.reverse
         for across_direction in (direction.next, direction.prev):
             inv_across_direction = across_direction.reverse
-            for block in grid.iterate_tile_blocks(across_direction.vec, 3, direction.vec, 3, EdgeMode.NO_WRAP):
+            for block in grid.iterate_tile_blocks(across_direction.vec, 3, direction.vec, 3):
                 block[0, 0] = None  # Unimportant tile
 
                 if (block == None).any():
@@ -518,10 +517,10 @@ def prevent_spirals(grid: Grid):
                     ]))
 
 
-def prevent_belt_parallel_splitter(grid: Grid, edge_mode: EdgeModeType):
+def prevent_belt_parallel_splitter(grid: Grid):
     for direction in Direction:
         for across_direction, is_head in ((direction.next, True), (direction.prev, False)):
-            for block in grid.iterate_tile_blocks(direction.vec, 2, across_direction.vec, 2, edge_mode):
+            for block in grid.iterate_tile_blocks(direction.vec, 2, across_direction.vec, 2):
                 if (block == None).any():
                     continue
 
@@ -539,10 +538,10 @@ def prevent_belt_parallel_splitter(grid: Grid, edge_mode: EdgeModeType):
                     ]))
 
 
-def glue_partial_splitters(grid: Grid, edge_mode: EdgeModeType):
+def glue_partial_splitters(grid: Grid):
     for direction in Direction:
         across_direction = direction.next
-        for block in grid.iterate_tile_blocks(direction.vec, 2, across_direction.vec, 2, edge_mode, max_x=grid.width - 2):
+        for block in grid.iterate_tile_blocks(direction.vec, 2, across_direction.vec, 2, max_x=grid.width - 2):
             if (block == None).any():
                 continue
 
@@ -580,12 +579,12 @@ def glue_partial_splitters(grid: Grid, edge_mode: EdgeModeType):
 
 def apply_generic_optimisations(grid: Grid):
     prevent_small_loops(grid)
-    prevent_empty_along_underground(grid, EdgeMode.NO_WRAP)
+    prevent_empty_along_underground(grid)
     glue_splitters(grid)
-    prevent_belt_hooks(grid, EdgeMode.NO_WRAP)
-    prevent_mergeable_underground(grid, EdgeMode.NO_WRAP)
-    prevent_semicircles(grid, EdgeMode.NO_WRAP)
-    prevent_underground_hook(grid, EdgeMode.NO_WRAP)
-    prevent_zigzags(grid, EdgeMode.NO_WRAP)
-    prevent_belt_parallel_splitter(grid, EdgeMode.NO_WRAP)
-    glue_partial_splitters(grid, EdgeMode.NO_WRAP)
+    prevent_belt_hooks(grid)
+    prevent_mergeable_underground(grid)
+    prevent_semicircles(grid)
+    prevent_underground_hook(grid)
+    prevent_zigzags(grid)
+    prevent_belt_parallel_splitter(grid)
+    glue_partial_splitters(grid)

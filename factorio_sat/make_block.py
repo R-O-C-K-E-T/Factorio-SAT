@@ -5,11 +5,11 @@ import sys
 from . import optimisations
 from . import solver
 from .direction import Axis, Direction
-from .template import EdgeMode, EdgeModeType
+from .template import EdgeMode
 from .util import implies, increment_number, invert_components, set_all_false, set_number, set_numbers_equal
 
 
-def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
+def ensure_loop_length(grid: solver.Grid):
     for y in range(grid.height):
         for x in range(grid.width):
             tile_a = grid.get_tile_instance(x, y)
@@ -21,7 +21,7 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
 
             for direction in Direction:
                 dx, dy = direction.vec
-                tile_b = grid.get_tile_instance_offset(x, y, dx, dy, edge_mode)
+                tile_b = grid.get_tile_instance_offset(x, y, dx, dy)
                 x1, y1 = x + dx, y + dy
 
                 if tile_b is None:
@@ -47,12 +47,12 @@ def ensure_loop_length(grid: solver.Grid, edge_mode: EdgeModeType):
                 grid.clauses += implies([tile_a.underground[direction], tile_b.underground[direction]], set_numbers_equal(colour_a, colour_b))
 
 
-def prevent_parallel(grid: solver.Grid, edge_mode: EdgeModeType):
+def prevent_parallel(grid: solver.Grid):
     for x in range(grid.width):
         for y in range(grid.height):
             tile_a = grid.get_tile_instance(x, y)
             for direction in (Direction.RIGHT, Direction.UP):
-                tile_b = grid.get_tile_instance_offset(x, y, *direction.next.vec, edge_mode)
+                tile_b = grid.get_tile_instance_offset(x, y, *direction.next.vec)
                 if tile_b is None:
                     continue
 
@@ -80,17 +80,16 @@ def main():
     if args.allow_empty and args.single_loop:
         raise RuntimeError('Incompatible options: allow-empty + single-loop')
 
+    edge_mode = EdgeMode.WRAP if args.tile else EdgeMode.NO_WRAP
     if args.underground_length < 0:
         raise RuntimeError('Underground length cannot be negative')
     if args.single_loop:
-        grid = solver.Grid(args.width, args.height, args.width * args.height, args.underground_length)
+        grid = solver.Grid(args.width, args.height, args.width * args.height, args.underground_length, edge_mode=edge_mode)
     else:
-        grid = solver.Grid(args.width, args.height, 1)
+        grid = solver.Grid(args.width, args.height, 1, edge_mode=edge_mode)
 
-    edge_mode = EdgeMode.WRAP if args.tile else EdgeMode.NO_WRAP
-
-    grid.prevent_intersection(edge_mode)
-    grid.prevent_bad_undergrounding(edge_mode)
+    grid.prevent_intersection()
+    grid.prevent_bad_undergrounding()
     if not args.tile:
         grid.block_belts_through_edges()
         grid.block_underground_through_edges()
@@ -98,14 +97,14 @@ def main():
     optimisations.prevent_small_loops(grid)
 
     if grid.underground_length > 0:
-        grid.enforce_maximum_underground_length(edge_mode)
-        optimisations.prevent_empty_along_underground(grid, edge_mode)
+        grid.enforce_maximum_underground_length()
+        optimisations.prevent_empty_along_underground(grid)
 
     if args.no_parallel:
-        prevent_parallel(grid, edge_mode)
+        prevent_parallel(grid)
 
     if args.single_loop:
-        ensure_loop_length(grid, edge_mode)
+        ensure_loop_length(grid)
 
     for tile in grid.iterate_tiles():
         if not args.allow_empty:

@@ -27,7 +27,7 @@ class EdgeMode(enum.Enum):
 EdgeModeType = Union[Tuple[EdgeMode, EdgeMode], EdgeMode]
 
 
-def expand_edge_mode(edge_mode: EdgeMode) -> Tuple[EdgeMode, EdgeMode]:
+def expand_edge_mode(edge_mode: EdgeModeType) -> Tuple[EdgeMode, EdgeMode]:
     if isinstance(edge_mode, EdgeMode):
         return edge_mode, edge_mode
     else:
@@ -269,11 +269,20 @@ class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
 
 
 class BaseGrid(Generic[InstanceType, ParsedType]):
-    def __init__(self, template: Template[InstanceType, ParsedType], width: int, height: int, pool: Optional[IDPool] = None):
+    def __init__(
+        self,
+        template: Template[InstanceType, ParsedType],
+        width: int,
+        height: int,
+        *,
+        pool: Optional[IDPool] = None,
+        edge_mode: EdgeModeType = EdgeMode.NO_WRAP
+    ):
         assert width > 0 and height > 0
         self.template = template
         self.width = width
         self.height = height
+        self.edge_mode = expand_edge_mode(edge_mode)
 
         if pool is None:
             self.pool = IDPool()
@@ -303,7 +312,6 @@ class BaseGrid(Generic[InstanceType, ParsedType]):
             column_count: int,
             rowwise_dir: Tuple[int, int],
             row_count: int,
-            edge_mode: EdgeModeType,
             min_x: Optional[int] = None,
             min_y: Optional[int] = None,
             max_x: Optional[int] = None,
@@ -319,7 +327,7 @@ class BaseGrid(Generic[InstanceType, ParsedType]):
         max_y_offset = ry * (row_count - 1) + cy * (column_count - 1)
 
         def get_tile(row, col):
-            return self.get_tile_instance_offset(x, y, rx * row + cx * col, ry * row + cy * col, edge_mode)
+            return self.get_tile_instance_offset(x, y, rx * row + cx * col, ry * row + cy * col)
 
         for x in range(self.width):
             for y in range(self.height):
@@ -346,14 +354,14 @@ class BaseGrid(Generic[InstanceType, ParsedType]):
 
                 yield np.frompyfunc(get_tile, 2, 1)(*np.ogrid[0:row_count, 0:column_count])
 
-    def iterate_tile_lines(self, direction: Tuple[int, int], length: int, edge_mode: EdgeModeType) -> Iterator[Sequence[Optional[InstanceType]]]:
+    def iterate_tile_lines(self, direction: Tuple[int, int], length: int) -> Iterator[Sequence[Optional[InstanceType]]]:
         dx, dy = direction
         assert abs(dx) + abs(dy) == 1
         assert length > 0
 
         for x in range(self.width):
             for y in range(self.height):
-                yield np.frompyfunc(lambda i: self.get_tile_instance_offset(x, y, dx * i, dy * i, edge_mode), 1, 1)(np.arange(length))
+                yield np.frompyfunc(lambda i: self.get_tile_instance_offset(x, y, dx * i, dy * i), 1, 1)(np.arange(length))
 
     def allocate_variable(self) -> LiteralType:
         return self.pool._next()
@@ -362,17 +370,15 @@ class BaseGrid(Generic[InstanceType, ParsedType]):
         assert x >= 0 and y >= 0 and x < self.width and y < self.height
         return self.tiles[y, x]
 
-    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int, edge_mode: EdgeModeType) -> Optional[InstanceType]:
-        edge_mode = expand_edge_mode(edge_mode)
-
+    def get_tile_instance_offset(self, x: int, y: int, dx: int, dy: int) -> Optional[InstanceType]:
         pos = [x + dx, y + dy]
         size = self.width, self.height
 
         for i in range(2):
             if pos[i] < 0 or pos[i] >= size[i]:
-                if edge_mode[i] == EdgeMode.WRAP:
+                if self.edge_mode[i] == EdgeMode.WRAP:
                     pos[i] = pos[i] % size[i]
-                elif edge_mode[i] == EdgeMode.NO_WRAP:
+                elif self.edge_mode[i] == EdgeMode.NO_WRAP:
                     return None
                 else:
                     assert False

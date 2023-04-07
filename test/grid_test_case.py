@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 
 from factorio_sat import solver
-from factorio_sat.template import CompositeTemplateParams, EdgeMode
+from factorio_sat.template import CompositeTemplateParams
 from factorio_sat import stringifier
 from factorio_sat import blueprint
 
@@ -53,10 +53,10 @@ class BaseGridTest(unittest.TestCase):
             self.grid.set_tile(x, y, tile)
 
     def enforce_basic_rules(self):
-        self.grid.prevent_intersection(EdgeMode.NO_WRAP)
-        self.grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
-        self.grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
-        self.grid.prevent_bad_colouring(EdgeMode.NO_WRAP)
+        self.grid.prevent_intersection()
+        self.grid.enforce_maximum_underground_length()
+        self.grid.prevent_bad_undergrounding()
+        self.grid.prevent_bad_colouring()
 
     def assert_sat(self):
         solution = self.grid.solve()

@@ -7,7 +7,7 @@ from . import optimisations
 from .direction import Direction
 from .cardinality import library_equals, quadratic_one
 from .solver import Belt, Grid
-from .template import EdgeMode, OneHotTemplate
+from .template import OneHotTemplate
 from .util import implies, invert_components, is_power_of_two, literals_different, set_all_false, set_numbers_equal
 
 
@@ -21,8 +21,8 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
     grid = Grid(width, height, 2**(height // 2), underground_length, {'level': OneHotTemplate(levels), 'level_primary': OneHotTemplate(levels)})
 
     grid.block_underground_through_edges()
-    grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
-    grid.prevent_bad_colouring(EdgeMode.NO_WRAP)
+    grid.prevent_bad_undergrounding()
+    grid.prevent_bad_colouring()
 
     for tile in grid.iterate_tiles():
         grid.clauses += implies([tile.is_splitter], [tile.input_direction, tile.output_direction])
@@ -49,9 +49,9 @@ def create_balancer(width: int, height: int, underground_length: int) -> Grid:
                     tile00.input_direction[direction],
                 ]
 
-                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.NO_WRAP)
-                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.NO_WRAP)
-                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.NO_WRAP)
+                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0)
+                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1)
+                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1)
 
                 if any(tile is None for tile in (tile00, tile10, tile01, tile11)):
                     grid.clauses.append(invert_components(precondition))
@@ -111,9 +111,9 @@ def main():
     grid = create_balancer(args.width, args.size, args.underground_length)
 
     grid.block_belts_through_edges((False, True))
-    grid.prevent_intersection(EdgeMode.NO_WRAP)
+    grid.prevent_intersection()
 
-    grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
+    grid.enforce_maximum_underground_length()
 
     optimisations.expand_underground(grid, min_x=1, max_x=grid.width - 2)
     optimisations.apply_generic_optimisations(grid)

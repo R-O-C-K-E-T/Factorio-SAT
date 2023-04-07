@@ -9,7 +9,7 @@ from . import optimisations
 from .direction import Direction
 from .cardinality import quadratic_amo, quadratic_one
 from .solver import Grid
-from .template import ArrayTemplate, BoolTemplate, EdgeMode, NumberTemplate, flatten
+from .template import ArrayTemplate, BoolTemplate, NumberTemplate, flatten
 from .util import add_numbers, implies, literals_same, make_fixed_allocator, set_all_false, set_maximum, set_number, set_numbers_equal
 
 
@@ -48,7 +48,7 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
     })
 
     grid.block_underground_through_edges()
-    grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
+    grid.prevent_bad_undergrounding()
 
     for tile in grid.iterate_tiles():
         grid.clauses += implies([tile.is_splitter], [tile.input_direction, tile.output_direction])
@@ -56,7 +56,7 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
         for flow_component in tile.flow:
             grid.clauses += set_maximum(full_flow, flow_component)
 
-    grid.transport_quantity(lambda tile: tile.flow, lambda tile: tile.flow_ux, lambda tile: tile.flow_uy, EdgeMode.NO_WRAP)
+    grid.transport_quantity(lambda tile: tile.flow, lambda tile: tile.flow_ux, lambda tile: tile.flow_uy)
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -70,9 +70,9 @@ def create_n_to_n_balancer(width: int, height: int, underground_length: int, siz
                     tile00.input_direction[direction],
                 ]
 
-                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.NO_WRAP)
-                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.NO_WRAP)
-                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.NO_WRAP)
+                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0)
+                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1)
+                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1)
 
                 if any(tile is None for tile in (tile00, tile10, tile01, tile11)):
                     continue
@@ -150,7 +150,7 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
     })
 
     grid.block_underground_through_edges()
-    grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
+    grid.prevent_bad_undergrounding()
 
     for tile in grid.iterate_tiles():
         for flow_component in tile.forward.flow + tile.backward.flow:
@@ -160,8 +160,8 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
             top_bits = [flow_component[-1] for flow_component in flow_direction]
             grid.clauses += quadratic_amo(top_bits)
 
-    grid.transport_quantity(lambda tile: tile.forward.flow, lambda tile: tile.forward.ux, lambda tile: tile.forward.uy, EdgeMode.NO_WRAP)
-    grid.transport_quantity(lambda tile: tile.backward.flow, lambda tile: tile.backward.ux, lambda tile: tile.backward.uy, EdgeMode.NO_WRAP)
+    grid.transport_quantity(lambda tile: tile.forward.flow, lambda tile: tile.forward.ux, lambda tile: tile.forward.uy)
+    grid.transport_quantity(lambda tile: tile.backward.flow, lambda tile: tile.backward.ux, lambda tile: tile.backward.uy)
 
     for x in range(grid.width):
         for y in range(grid.height):
@@ -170,9 +170,9 @@ def create_n_to_m_balancer(width: int, height: int, underground_length: int, inp
                 dx0, dy0 = direction.vec
                 dx1, dy1 = direction.next.vec
 
-                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0, EdgeMode.NO_WRAP)
-                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1, EdgeMode.NO_WRAP)
-                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1, EdgeMode.NO_WRAP)
+                tile10 = grid.get_tile_instance_offset(x, y, dx0, dy0)
+                tile01 = grid.get_tile_instance_offset(x, y, dx1, dy1)
+                tile11 = grid.get_tile_instance_offset(x, y, dx0 + dx1, dy0 + dy1)
 
                 if any(tile is None for tile in (tile00, tile10, tile01, tile11)):
                     continue
@@ -387,9 +387,9 @@ def main():
     setup_balancer_ends(grid, args.input_count, args.output_count, args.aligned)
 
     grid.block_belts_through_edges((False, True))
-    grid.prevent_intersection(EdgeMode.NO_WRAP)
+    grid.prevent_intersection()
 
-    grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
+    grid.enforce_maximum_underground_length()
 
     optimisations.expand_underground(grid, min_x=1, max_x=grid.width - 2)
     optimisations.apply_generic_optimisations(grid)

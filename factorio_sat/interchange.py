@@ -10,7 +10,6 @@ from . import optimisations
 from .cardinality import library_atleast, library_equals
 from .direction import Axis, Direction
 from .solver import Grid
-from .template import EdgeMode
 from .util import LiteralType, implies, invert_components, set_all_false, set_literal, set_not_number, set_number, set_numbers, set_numbers_equal
 
 
@@ -19,7 +18,7 @@ def prevent_passing(grid: Grid):
 
     for direction in Direction:
         inv_direction = direction.reverse
-        for block in grid.iterate_tile_blocks(direction.vec, 2, direction.next.vec, 2, EdgeMode.NO_WRAP):
+        for block in grid.iterate_tile_blocks(direction.vec, 2, direction.next.vec, 2):
             if (block == None).any():
                 continue
 
@@ -46,7 +45,7 @@ def prevent_awkward_underground_entry(grid: Grid):
     for direction in Direction:
         inv_direction = direction.reverse
         across_direction = direction.next
-        for block in grid.iterate_tile_blocks(across_direction.vec, 3, direction.vec, 3, EdgeMode.NO_WRAP):
+        for block in grid.iterate_tile_blocks(across_direction.vec, 3, direction.vec, 3):
             if (block == None).any():
                 continue
 
@@ -218,21 +217,21 @@ def main():
     grid.block_underground_through_edges()
     grid.block_belts_through_edges((False, True))
 
-    grid.prevent_bad_undergrounding(EdgeMode.NO_WRAP)
-    grid.prevent_bad_colouring(EdgeMode.NO_WRAP)
+    grid.prevent_bad_undergrounding()
+    grid.prevent_bad_colouring()
 
-    grid.prevent_intersection(EdgeMode.NO_WRAP)
-    grid.enforce_maximum_underground_length(EdgeMode.NO_WRAP)
+    grid.prevent_intersection()
+    grid.enforce_maximum_underground_length()
 
     if args.rot_symmetry:
         require_rotational_symmetry(grid)
         optimisations.expand_underground(grid)
         optimisations.prevent_small_loops(grid)
-        optimisations.prevent_empty_along_underground(grid, EdgeMode.NO_WRAP)
-        optimisations.prevent_belt_hooks(grid, EdgeMode.NO_WRAP)
-        optimisations.prevent_mergeable_underground(grid, EdgeMode.NO_WRAP)
-        optimisations.prevent_semicircles(grid, EdgeMode.NO_WRAP)
-        optimisations.prevent_underground_hook(grid, EdgeMode.NO_WRAP)
+        optimisations.prevent_empty_along_underground(grid)
+        optimisations.prevent_belt_hooks(grid)
+        optimisations.prevent_mergeable_underground(grid)
+        optimisations.prevent_semicircles(grid)
+        optimisations.prevent_underground_hook(grid)
     else:
         optimisations.apply_generic_optimisations(grid)
 
