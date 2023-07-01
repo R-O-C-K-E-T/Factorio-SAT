@@ -3,6 +3,7 @@ import collections
 import copy
 import json
 import math
+import sys
 from os import path
 from typing import Tuple
 
@@ -16,7 +17,7 @@ from . import blueprint
 try:
     from graphviz import Digraph
 except ModuleNotFoundError:
-    print('"graphviz" not installed: network rendering will not work')
+    print('"graphviz" not installed: network rendering will not work', file=sys.stderr)
 
 
 def create_benes_network(size):
