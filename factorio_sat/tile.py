@@ -50,6 +50,15 @@ class EmptyTile(BaseTile):
         return cls()
 
 
+@dataclass(frozen=True)
+class FillerTile(BaseTile):
+    type_key: ClassVar[str] = 'filler'
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]):
+        return cls()
+
+
 class BeltConnectedTile(BaseTile):
     input_direction: Optional[Direction]
     output_direction: Optional[Direction]

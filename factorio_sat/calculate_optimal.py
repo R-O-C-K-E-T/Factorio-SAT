@@ -37,7 +37,6 @@ def solve_balancer(network, size: Tuple[int, int, int], solver: str):
 
     network = deduplicate_network(network)
     grid = belt_balancer.create_balancer(network, width, height, maximum_underground_length)
-    grid.block_belts_through_edges((False, True))
     grid.prevent_intersection(EdgeMode.NO_WRAP)
     belt_balancer.setup_balancer_ends(grid, network, True, False)
 
