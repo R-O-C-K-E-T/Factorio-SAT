@@ -6,7 +6,7 @@ from .cardinality import quadratic_amo, quadratic_one
 from .direction import Axis, Direction
 from .template import (ArrayTemplate, BoolTemplate, CompositeTemplate, CompositeTemplateParams, EdgeMode,
                        EdgeModeType, FactorioGrid, NestedArray, NumberTemplate, OneHotTemplate, flatten)
-from .tile import BaseTile, Belt, EmptyTile, Splitter, UndergroundBelt
+from .tile import BaseTile, Belt, EmptyTile, FillerTile, Splitter, UndergroundBelt
 from .util import LiteralType, implies, invert_components, literals_same, set_all_false, set_literal, set_maximum, set_not_number, set_number, set_numbers_equal
 
 
@@ -18,6 +18,8 @@ class TileTemplate(Protocol):
     is_underground_out: LiteralType
     is_splitter: LiteralType
     is_splitter_head: LiteralType
+    is_input: LiteralType
+    is_output: LiteralType
     input_direction: List[LiteralType]
     output_direction: List[LiteralType]
     all_direction: List[LiteralType]
@@ -47,6 +49,8 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
             'is_underground_in': BoolTemplate(),
             'is_underground_out': BoolTemplate(),
             'is_splitter_head': BoolTemplate(),
+            'is_input': BoolTemplate(),
+            'is_output': BoolTemplate(),
             'input_direction': OneHotTemplate(4),
             'output_direction': OneHotTemplate(4),
             'underground': ArrayTemplate(BoolTemplate(), (4,)),
@@ -144,10 +148,80 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
                     self.clauses += implies([side[inv_direction], tile_a.is_splitter, -tile_a.is_splitter_head],
                                             [[tile_b.input_direction[inv_direction], tile_b.output_direction[inv_direction]]])
 
+        # Inputs and outputs
+        for x in range(self.width):
+            for y in range(self.height):
+                tile = self.get_tile_instance(x, y)
+                if x == 0:
+                    # Top left corner
+                    if y == 0:
+                        self.clauses += implies([tile.is_input], [[tile.input_direction[Direction.RIGHT], tile.input_direction[Direction.DOWN]]])
+                        self.clauses += implies([tile.input_direction[Direction.RIGHT]], [[tile.is_input]])
+                        self.clauses += implies([tile.input_direction[Direction.DOWN]], [[tile.is_input]])
+                        self.clauses += implies([tile.is_output], [[tile.output_direction[Direction.LEFT], tile.output_direction[Direction.UP]]])
+                        self.clauses += implies([tile.output_direction[Direction.LEFT]], [[tile.is_output]])
+                        self.clauses += implies([tile.output_direction[Direction.UP]], [[tile.is_output]])
+                    # Bottom left corner
+                    elif y == self.height - 1:
+                        self.clauses += implies([tile.is_input], [[tile.input_direction[Direction.RIGHT], tile.input_direction[Direction.UP]]])
+                        self.clauses += implies([tile.input_direction[Direction.RIGHT]], [[tile.is_input]])
+                        self.clauses += implies([tile.input_direction[Direction.UP]], [[tile.is_input]])
+                        self.clauses += implies([tile.is_output], [[tile.output_direction[Direction.LEFT], tile.output_direction[Direction.DOWN]]])
+                        self.clauses += implies([tile.output_direction[Direction.LEFT]], [[tile.is_output]])
+                        self.clauses += implies([tile.output_direction[Direction.DOWN]], [[tile.is_output]])
+                    # Left edge
+                    else:
+                        self.clauses += implies([tile.is_input], [[tile.input_direction[Direction.RIGHT]]])
+                        self.clauses += implies([tile.input_direction[Direction.RIGHT]], [[tile.is_input]])
+                        self.clauses += implies([tile.is_output], [[tile.output_direction[Direction.LEFT]]])
+                        self.clauses += implies([tile.output_direction[Direction.LEFT]], [[tile.is_output]])
+                elif x == self.width - 1:
+                    # Top right corner
+                    if y == 0:
+                        self.clauses += implies([tile.is_input], [[tile.input_direction[Direction.LEFT], tile.input_direction[Direction.DOWN]]])
+                        self.clauses += implies([tile.input_direction[Direction.LEFT]], [[tile.is_input]])
+                        self.clauses += implies([tile.input_direction[Direction.DOWN]], [[tile.is_input]])
+                        self.clauses += implies([tile.is_output], [[tile.output_direction[Direction.RIGHT], tile.output_direction[Direction.UP]]])
+                        self.clauses += implies([tile.output_direction[Direction.RIGHT]], [[tile.is_output]])
+                        self.clauses += implies([tile.output_direction[Direction.UP]], [[tile.is_output]])
+                    # Bottom right corner
+                    elif y == self.height - 1:
+                        self.clauses += implies([tile.is_input], [[tile.input_direction[Direction.LEFT], tile.input_direction[Direction.UP]]])
+                        self.clauses += implies([tile.input_direction[Direction.LEFT]], [[tile.is_input]])
+                        self.clauses += implies([tile.input_direction[Direction.UP]], [[tile.is_input]])
+                        self.clauses += implies([tile.is_output], [[tile.output_direction[Direction.RIGHT], tile.output_direction[Direction.DOWN]]])
+                        self.clauses += implies([tile.output_direction[Direction.RIGHT]], [[tile.is_output]])
+                        self.clauses += implies([tile.output_direction[Direction.DOWN]], [[tile.is_output]])
+                    # Right edge
+                    else:
+                        self.clauses += implies([tile.is_input], [[tile.input_direction[Direction.LEFT]]])
+                        self.clauses += implies([tile.input_direction[Direction.LEFT]], [[tile.is_input]])
+                        self.clauses += implies([tile.is_output], [[tile.output_direction[Direction.RIGHT]]])
+                        self.clauses += implies([tile.output_direction[Direction.RIGHT]], [[tile.is_output]])
+                elif y == 0:
+                    # Top edge (corners handled on vertical edges)
+                    self.clauses += implies([tile.is_input], [[tile.input_direction[Direction.DOWN]]])
+                    self.clauses += implies([tile.input_direction[Direction.DOWN]], [[tile.is_input]])
+                    self.clauses += implies([tile.is_output], [[tile.output_direction[Direction.UP]]])
+                    self.clauses += implies([tile.output_direction[Direction.UP]], [[tile.is_output]])
+                elif y == self.height - 1:
+                    # Bottom edge (corners handled on vertical edges)
+                    self.clauses += implies([tile.is_input], [[tile.input_direction[Direction.UP]]])
+                    self.clauses += implies([tile.input_direction[Direction.UP]], [[tile.is_input]])
+                    self.clauses += implies([tile.is_output], [[tile.output_direction[Direction.DOWN]]])
+                    self.clauses += implies([tile.output_direction[Direction.DOWN]], [[tile.is_output]])
+
+                else:
+                    # Not on edge
+                    self.clauses.append([-tile.is_input])
+                    self.clauses.append([-tile.is_output])
+
     def set_tile(self, x: int, y: int, tile: BaseTile):
         tile_instance = self.get_tile_instance(x, y)
 
         if isinstance(tile, EmptyTile):
+            self.clauses.append([tile_instance.is_empty])
+        elif isinstance(tile, FillerTile):
             self.clauses.append([tile_instance.is_empty])
         elif isinstance(tile, Splitter):
             self.clauses.append([tile_instance.is_splitter])
@@ -274,18 +348,26 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
             for y in range(self.height):
                 tile = self.get_tile_instance(0, y)
                 self.clauses += set_all_false(tile.underground[0::2])
+                self.clauses += implies([tile.input_direction[Direction.LEFT]], [[-tile.is_underground_in]])
+                self.clauses += implies([tile.output_direction[Direction.RIGHT]], [[-tile.is_underground_out]])
         if max_x_blocked:
             for y in range(self.height):
                 tile = self.get_tile_instance(self.width - 1, y)
                 self.clauses += set_all_false(tile.underground[0::2])
+                self.clauses += implies([tile.input_direction[Direction.RIGHT]], [[-tile.is_underground_in]])
+                self.clauses += implies([tile.output_direction[Direction.LEFT]], [[-tile.is_underground_out]])
         if min_y_blocked:
             for x in range(self.width):
                 tile = self.get_tile_instance(x, 0)
                 self.clauses += set_all_false(tile.underground[1::2])
+                self.clauses += implies([tile.input_direction[Direction.UP]], [[-tile.is_underground_in]])
+                self.clauses += implies([tile.output_direction[Direction.DOWN]], [[-tile.is_underground_out]])
         if max_y_blocked:
             for x in range(self.width):
                 tile = self.get_tile_instance(x, self.height - 1)
                 self.clauses += set_all_false(tile.underground[1::2])
+                self.clauses += implies([tile.input_direction[Direction.DOWN]], [[-tile.is_underground_in]])
+                self.clauses += implies([tile.output_direction[Direction.UP]], [[-tile.is_underground_out]])
 
     def block_belts_through_edges(self, edges: Union[bool, Tuple[bool, bool], Tuple[bool, bool, bool, bool]] = True):
         if isinstance(edges, bool):

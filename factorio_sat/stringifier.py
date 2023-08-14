@@ -6,7 +6,7 @@ import numpy as np
 
 from .blueprint import read_tile, write_tile
 from .direction import Direction
-from .tile import Belt, EmptyTile, Splitter, UndergroundBelt
+from .tile import Belt, EmptyTile, FillerTile, Splitter, UndergroundBelt
 
 
 def raw_print(data):
@@ -50,6 +50,7 @@ def style_seq(fg=None, bg=None, bold=False, underlined=False):
 
 MAPPING = {
     EmptyTile(): ' ',
+    FillerTile(): 'X',
     Belt(Direction.RIGHT, Direction.RIGHT): '→',
     Belt(Direction.UP, Direction.UP): '↑',
     Belt(Direction.LEFT, Direction.LEFT): '←',

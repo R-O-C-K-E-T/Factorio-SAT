@@ -35,17 +35,19 @@ def expand_edge_mode(edge_mode: EdgeMode) -> Tuple[EdgeMode, EdgeMode]:
 
 
 def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[LiteralType]]:
-    def interpret_solver_answer(stdout):
-        result = io.TextIOWrapper(stdout)
+    def interpret_solver_answer(proc):
+        result = io.TextIOWrapper(proc.stdout)
         # partials = []
         while True:
             line = result.readline()
             if line.startswith('s'):
                 break
+            if line == '' and proc.poll() is not None:
+                raise RuntimeError('Solver process crashed')
+
             # if line.startswith('c partial'):
             #     pieces = line.split(' ')[2:-1]
             #     partials.append([int(x) for x in pieces])
-
             print(line, file=sys.stderr, end='')
 
         # with open('partials.json', 'w') as f:
@@ -86,13 +88,13 @@ def run_command_solver(cmd: str, clauses: ClauseList) -> Optional[List[LiteralTy
             pieces = [file.name if piece == '$FILE' else piece for piece in pieces]
 
             with subprocess.Popen(pieces, stdout=subprocess.PIPE) as process:
-                return interpret_solver_answer(process.stdout)
+                return interpret_solver_answer(process)
     else:
         with subprocess.Popen(pieces, stdin=subprocess.PIPE, stdout=subprocess.PIPE) as process:
             formula.to_fp(io.TextIOWrapper(process.stdin))
             del formula
             process.stdin.close()
-            return interpret_solver_answer(process.stdout)
+            return interpret_solver_answer(process)
 
 
 T = TypeVar('T')

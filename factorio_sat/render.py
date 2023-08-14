@@ -16,7 +16,7 @@ from pygame.locals import *
 from . import blueprint
 from . import tilemaps
 from .direction import Direction
-from .tile import AssemblingMachine, BaseTile, EmptyTile, Inserter
+from .tile import AssemblingMachine, BaseTile, EmptyTile, FillerTile, Inserter
 from .solver import Belt, Splitter, UndergroundBelt
 
 BELT_ANIMATION_LENGTH = 16
@@ -81,7 +81,7 @@ def draw_texture(texture, width=None, height=None):
 
 def get_animation_length(solution):
     for tile in solution.reshape(-1):
-        if tile.get('is_splitter') is True:
+        if tile.get('is_splitter') is True or (tile.get("tile") is not None and tile["tile"].get("type") == "splitter"):
             return SPLITTER_ANIMATION_LENGTH
     return BELT_ANIMATION_LENGTH
 
@@ -263,7 +263,7 @@ def render_solution(solution, animation: int, colouring=True, colour_count: Opti
                 item = solution[y, x]
 
                 tile = blueprint.read_tile(item)
-                if isinstance(tile, EmptyTile):
+                if isinstance(tile, EmptyTile) or isinstance(tile, FillerTile):
                     continue
 
                 colour = item.get('colour', 0)
@@ -355,9 +355,7 @@ def render_attributes(solution, font, names: List[str]):
                     except ValueError:
                         pass
 
-                    if piece not in sub_item:
-                        raise RuntimeError('{} not found in tile {}'.format(name, item))
-                    sub_item = sub_item[piece]
+                    sub_item = sub_item.get(piece)
 
                 text = str(np.array(sub_item))
                 for line in text.split('\n'):

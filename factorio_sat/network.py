@@ -9,7 +9,7 @@ from typing import Tuple
 import numpy as np
 from pysat.solvers import Solver
 
-from .tile import Belt, EmptyTile, Splitter, UndergroundBelt
+from .tile import Belt, EmptyTile, FillerTile, Splitter, UndergroundBelt
 from .util import bin_length, get_popcount, read_number, set_not_number
 from . import blueprint
 
@@ -587,7 +587,7 @@ def parse_network(tiles, assume_edge_splitter_are_connected=False):
             if colour_mapping[x, y] is not None:
                 continue
 
-            if tile == EmptyTile():
+            if tile == EmptyTile() or tile == FillerTile():
                 colour_mapping[x, y] = -1
                 continue
 

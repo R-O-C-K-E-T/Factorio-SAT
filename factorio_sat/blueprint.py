@@ -11,7 +11,7 @@ import zlib
 import numpy as np
 
 from .direction import Direction
-from .tile import AssemblingMachine, BaseTile, Belt, BeltConnectedTile, EmptyTile, Inserter, Splitter, UndergroundBelt
+from .tile import AssemblingMachine, BaseTile, Belt, BeltConnectedTile, EmptyTile, FillerTile, Inserter, Splitter, UndergroundBelt
 
 
 class TransportBeltLevel(enum.Enum):
@@ -58,7 +58,7 @@ def make_blueprint(tiles, label: Optional[str] = None, level: TransportBeltLevel
     entities = []
     entity_number = 1
     for (y, x), tile in np.ndenumerate(tiles):
-        if isinstance(tile, EmptyTile):
+        if isinstance(tile, EmptyTile) or isinstance(tile, FillerTile):
             continue
 
         entity = {'entity_number': entity_number, 'position': {'x': x + 0.5, 'y': y + 0.5}}
@@ -174,6 +174,8 @@ def import_blueprint(data: Any):
             for dx in range(3):
                 for dy in range(3):
                     entities[x0 + dx, y0 + dy] = AssemblingMachine(dx, dy)
+        elif name == 'wooden-chest':
+            entities[floor_pos] = FillerTile()
         else:
             raise RuntimeError('Unsupported entity: ' + name)
 
