@@ -34,6 +34,7 @@ pip install --editable .
 
 # Get textures
 fetch_assets /path/to/factorio/install
+# NOTE: The path on macOS with steam install: /Users/{username}/Library/Application\ Support/Steam/steamapps/common/Factorio/factorio.app/Contents/
 
 # Factorio install directory should look something like:
 # Factorio/
