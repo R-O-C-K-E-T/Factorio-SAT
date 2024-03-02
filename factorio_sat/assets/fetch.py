@@ -3,7 +3,11 @@ import glob
 import json
 import shutil
 import sys
+import os
+
 from os import path
+
+ASSETS_DIR = path.join(os.getenv("XDG_DATA_HOME"), "factorio-sat/assets")
 
 try:
     from luaparser import ast
@@ -12,8 +16,8 @@ except ModuleNotFoundError:
     ast = None
 
 
-def fetch_tilemaps(base_directory: str):
-    graphics_directory = path.join(base_directory, 'graphics', 'entity')
+def copy_game_tilemaps(base_dir: str, assets_dir: str):
+    graphics_dir = path.join(base_dir, 'graphics', 'entity')
 
     files = [
         ('assembling-machine-1', 'hr-assembling-machine-1.png'),
@@ -46,8 +50,9 @@ def fetch_tilemaps(base_directory: str):
     ]
 
     for file in files:
-        source = path.join(graphics_directory, *file)
-        destination = path.join(path.dirname(__file__), file[-1])
+        source = path.join(graphics_dir, *file)
+
+        destination = path.join(assets_dir, file[-1])
 
         print('Copying: {} -> {}'.format(source, destination))
         shutil.copyfile(source, destination)
@@ -130,9 +135,9 @@ def get_recipes_for_variant(data, variant):
     return recipes
 
 
-def fetch_recipes(base_directory):
+def copy_game_recipes(base_dir, assets_dir):
     data = []
-    for file in glob.glob(path.join(base_directory, 'prototypes', 'recipe', '*.lua')):
+    for file in glob.glob(path.join(base_dir, 'prototypes', 'recipe', '*.lua')):
         with open(file) as f:
             text = f.read()
 
@@ -142,7 +147,7 @@ def fetch_recipes(base_directory):
         data += entry
 
     for variant in ('normal', 'expensive'):
-        with open(path.join(path.dirname(__file__), f'{variant}-recipes.json'), 'w') as f:
+        with open(path.join(assets_dir, f'{variant}-recipes.json'), 'w') as f:
             json.dump(get_recipes_for_variant(data, variant), f)
 
 
@@ -170,11 +175,12 @@ def main():
     if not path.exists(game_directory):
         raise RuntimeError('Factorio not found at: {}'.format(game_directory))
 
-    base_directory = path.join(game_directory, 'data', 'base')
+    game_base_dir = path.join(game_directory, 'data', 'base')
 
-    fetch_tilemaps(base_directory)
+    os.makedirs(ASSETS_DIR, exist_ok=True)
+    copy_game_tilemaps(game_base_dir, ASSETS_DIR)
     if ast is not None:
-        fetch_recipes(base_directory)
+        copy_game_recipes(game_base_dir, ASSETS_DIR)
 
 
 if __name__ == '__main__':
