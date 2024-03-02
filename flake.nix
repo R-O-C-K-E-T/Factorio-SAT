@@ -13,6 +13,8 @@
       pkgsFor =
         eachSystem (system: import nixpkgs { localSystem.system = system; });
     in {
+      overlays.default = import ./nix/overlay.nix;
+
       packages = eachSystem (system:
         let pkgs = pkgsFor.${system};
         in pkgs.callPackage ./nix/packages.nix { } // {
