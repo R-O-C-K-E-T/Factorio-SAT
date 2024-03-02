@@ -7,12 +7,14 @@ let
     packageOverrides = lib.composeManyExtensions [
       antlr4_7_2.pythonOverrides
       (pypkgs: _: {
-        luaparser = pypkgs.toPythonModule (pypkgs.callPackage ./luaparser.nix { });
+        luaparser =
+          pypkgs.toPythonModule (pypkgs.callPackage ./luaparser.nix { });
       })
     ];
   };
 
   factorio-sat = python.pkgs.callPackage ./factorio-sat.nix { };
-in {
-  inherit factorio-sat;
+  factorio-sat-cli = callPackage ./cli.nix { inherit factorio-sat; };
+in { # #
+  inherit factorio-sat factorio-sat-cli;
 }
