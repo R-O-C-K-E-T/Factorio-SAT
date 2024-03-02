@@ -16,12 +16,20 @@
           overlays = [ self.overlays.default ];
         });
     in {
-      overlays.default = import ./nix/overlay.nix;
+      devShells = lib.mapAttrs (system: pkgs: {
+        default = pkgs.mkShell {
+          packages = [ pkgs.factorio-sat pkgs.factorio-sat-cli ];
+        };
+      }) pkgsFor;
 
-      packages = eachSystem (system: {
-        inherit (pkgsFor.${system}) factorio-sat factorio-sat-cli;
+      overlays = {
+        default = import ./nix/overlay.nix;
+      };
+
+      packages = lib.mapAttrs (system: pkgs: {
+        inherit (pkgs) factorio-sat factorio-sat-cli;
         default = self.packages.${system}.factorio-sat;
-      });
+      }) pkgsFor;
 
       formatter = eachSystem (system: nixfmt.packages.${system}.default);
     };
