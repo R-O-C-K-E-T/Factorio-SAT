@@ -171,6 +171,44 @@ def require_correct_transport_through_edges(grid: Grid):
         grid.clauses += library_equals(forward_flow + invert_components(backward_flow), grid.height + len(backward_edge), grid.pool)
 
 
+def create_grid(width: int, height: int, underground_length: int, alternating: bool) -> Grid:
+    grid = Grid(width, height, 2, underground_length)
+
+    # No splitters
+    for tile in grid.iterate_tiles():
+        grid.clauses.append([-tile.is_splitter])
+
+    for y in range(0, grid.height):
+        grid.clauses.append([grid.get_tile_instance(0, y).input_direction[0]])
+        grid.clauses.append([grid.get_tile_instance(grid.width - 1, y).output_direction[0]])
+
+    for y in range(0, grid.height // 2):
+        grid.set_colour(0, y, 0)
+    for y in range(grid.height // 2, grid.height):
+        grid.set_colour(0, y, 1)
+
+    if alternating:
+        for y in range(grid.height):
+            tile = grid.get_tile_instance(grid.width - 1, y)
+            grid.clauses += set_number(y % 2, tile.colour)
+    else:
+        for y in range(0, grid.height, 2):
+            tile0 = grid.get_tile_instance(grid.width - 1, y)
+            tile1 = grid.get_tile_instance(grid.width - 1, y + 1)
+            grid.clauses += set_numbers(0, 1, tile0.colour, tile1.colour)
+
+    grid.block_underground_through_edges()
+    grid.block_belts_through_edges((False, True))
+
+    grid.prevent_bad_undergrounding()
+    grid.prevent_bad_colouring()
+
+    grid.prevent_intersection()
+    grid.enforce_maximum_underground_length()
+
+    return grid
+
+
 def main():
     parser = argparse.ArgumentParser(description='Finds an interchange for building composite balancers')
     parser.add_argument('width', type=int, help='Interchange width')
@@ -189,39 +227,7 @@ def main():
     if args.height % 2 == 1:
         raise RuntimeError('Height not multiple of 2')
 
-    grid = Grid(args.width, args.height, 2, args.underground_length)
-
-    # No splitters
-    for tile in grid.iterate_tiles():
-        grid.clauses.append([-tile.is_splitter])
-
-    for y in range(0, grid.height):
-        grid.clauses.append([grid.get_tile_instance(0, y).input_direction[0]])
-        grid.clauses.append([grid.get_tile_instance(grid.width - 1, y).output_direction[0]])
-
-    for y in range(0, grid.height // 2):
-        grid.set_colour(0, y, 0)
-    for y in range(grid.height // 2, grid.height):
-        grid.set_colour(0, y, 1)
-
-    if args.alternating:
-        for y in range(grid.height):
-            tile = grid.get_tile_instance(grid.width - 1, y)
-            grid.clauses += set_number(y % 2, tile.colour)
-    else:
-        for y in range(0, grid.height, 2):
-            tile0 = grid.get_tile_instance(grid.width - 1, y)
-            tile1 = grid.get_tile_instance(grid.width - 1, y + 1)
-            grid.clauses += set_numbers(0, 1, tile0.colour, tile1.colour)
-
-    grid.block_underground_through_edges()
-    grid.block_belts_through_edges((False, True))
-
-    grid.prevent_bad_undergrounding()
-    grid.prevent_bad_colouring()
-
-    grid.prevent_intersection()
-    grid.enforce_maximum_underground_length()
+    grid = create_grid(args.width, args.height, args.underground_length, args.alternating)
 
     if args.rot_symmetry:
         require_rotational_symmetry(grid)
