@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Generic, Iterator, List, NamedTuple, Optional, Protocol, Sequence, Tuple, TypeVar, Union
+from typing import Any, Callable, ClassVar, Dict, Generic, Iterator, List, NamedTuple, Optional, Protocol, Sequence, Tuple, TypeVar, Union
 
 import numpy as np
 from pysat.formula import CNF, IDPool
@@ -119,8 +119,8 @@ ParsedType = TypeVar('ParsedType')
 
 
 class Template(Protocol[InstanceType, ParsedType]):
-    shape: Tuple[int, ...]
     variable_count: int
+    type_key: ClassVar[str]
 
     def instantiate(self, pool: IDPool) -> InstanceType:
         ...
@@ -128,9 +128,28 @@ class Template(Protocol[InstanceType, ParsedType]):
     def parse(self, instance: InstanceType, mapping: Dict[int, bool]) -> ParsedType:
         ...
 
+    def __init_subclass__(cls, /, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if hasattr(cls, 'type_key'):
+            if cls.type_key in TEMPLATE_TYPES:
+                raise RuntimeError(f'Duplicate tile type key: {repr(cls.type_key)}')
+            TEMPLATE_TYPES[cls.type_key] = cls
+
+    def write(self) -> Dict[str, Any]:
+        return {'type': self.type_key}
+
+    @staticmethod
+    def read(json_dict: Dict[str, Any]) -> 'Template':
+        return TEMPLATE_TYPES[json_dict['type']].read(json_dict)
+
+
+TEMPLATE_TYPES: Dict[str, Template] = {}
+
 
 @dataclass(frozen=True)
 class BoolTemplate(Template[LiteralType, bool]):
+    type_key = 'bool'
+
     @property
     def variable_count(self):
         return 1
@@ -141,11 +160,16 @@ class BoolTemplate(Template[LiteralType, bool]):
     def parse(self, instance: LiteralType, mapping: Dict[int, bool]) -> bool:
         return mapping[instance]
 
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]):
+        return cls()
+
 
 @dataclass(frozen=True)
 class ArrayTemplate(Template[NestedArray[InstanceType], NestedArray[ParsedType]]):
     component: Template[InstanceType, ParsedType]
     shape: Tuple[int, ...]
+    type_key = 'array'
 
     @property
     def variable_count(self):
@@ -169,6 +193,17 @@ class ArrayTemplate(Template[NestedArray[InstanceType], NestedArray[ParsedType]]
 
         return recurse(instance, self.shape)
 
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'shape': list(self.shape),
+            'component': self.component.write()
+        }
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]) -> 'ArrayTemplate':
+        return cls(Template.read(json_dict['component']), tuple(json_dict['shape']))
+
 
 T = TypeVar('T')
 
@@ -182,11 +217,24 @@ class SizedTemplate(Template[List[LiteralType], T]):
         return self.size
 
     def instantiate(self, pool: IDPool) -> List[LiteralType]:
-        return [pool._next() for _ in range(self.size)]
+        vars = [pool._next() for _ in range(self.size)]
+        return vars
+
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'size': int(self.size),
+        }
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]) -> 'SizedTemplate':
+        return cls(int(json_dict['size']))
 
 
 @dataclass(frozen=True)
 class ManyHotTemplate(SizedTemplate[List[int]]):
+    type_key = 'many_hot'
+
     def parse(self, instance: List[LiteralType], mapping: Dict[int, bool]) -> List[int]:
         assert isinstance(instance, list)
         return [j for j, lit in enumerate(instance) if mapping[lit]]
@@ -194,6 +242,8 @@ class ManyHotTemplate(SizedTemplate[List[int]]):
 
 @dataclass(frozen=True)
 class OneHotTemplate(SizedTemplate[Optional[int]]):
+    type_key = 'one_hot'
+
     def parse(self, instance: List[LiteralType], mapping: Dict[int, bool]) -> Optional[int]:
         assert isinstance(instance, list)
         for i, lit in enumerate(instance):
@@ -205,10 +255,21 @@ class OneHotTemplate(SizedTemplate[Optional[int]]):
 @dataclass(frozen=True)
 class NumberTemplate(SizedTemplate[int]):
     is_signed: bool = False
+    type_key = 'number'
 
     def parse(self, instance: List[LiteralType], mapping: Dict[int, bool]) -> int:
         assert isinstance(instance, list)
         return read_number([mapping[lit] for lit in instance], self.is_signed)
+
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'is_signed': bool(self.is_signed),
+        }
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]) -> 'NumberTemplate':
+        return cls(int(json_dict['size']), bool(json_dict['is_signed']))
 
 
 CompositeTemplateParams = Dict[str, Union[Template[Any, Any], Callable, 'CompositeTemplateParams']]
@@ -223,17 +284,19 @@ def call_ignoring_unused(func: Callable[..., T], args: Dict[str, Any]) -> T:
 
 
 class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
+    type_key = 'composite'
+
     def __init__(self, template: CompositeTemplateParams):
-        self._atomics: Dict[str, Template] = {}
-        self._aliases: Dict[str, Callable] = {}
+        self.atomics: Dict[str, Template] = {}
+        self.aliases: Dict[str, Callable] = {}
         for name, val in template.items():
             if callable(val):
-                self._aliases[name] = val
+                self.aliases[name] = val
             elif isinstance(val, dict):
-                self._atomics[name] = CompositeTemplate(val)
+                self.atomics[name] = CompositeTemplate(val)
             else:
-                self._atomics[name] = val
-        self.variable_count = sum(entry.variable_count for entry in self._atomics.values())
+                self.atomics[name] = val
+        self.variable_count = sum(entry.variable_count for entry in self.atomics.values())
 
         self.tile_type = collections.namedtuple('CompositeInstance', template.keys(), rename=True)
 
@@ -241,7 +304,7 @@ class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
         tile_dict = instance._asdict()
         result = {}
 
-        for name, item_type in self._atomics.items():
+        for name, item_type in self.atomics.items():
             result[name] = item_type.parse(tile_dict[name], mapping)
 
         return result
@@ -249,10 +312,10 @@ class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
     def instantiate(self, pool: IDPool) -> NamedTuple:
         members: Dict[str, Any] = {}
 
-        for name, item_type in self._atomics.items():
+        for name, item_type in self.atomics.items():
             members[name] = item_type.instantiate(pool)
 
-        for name, function in self._aliases.items():
+        for name, function in self.aliases.items():
             result = call_ignoring_unused(function, members)
             if isinstance(result, np.ndarray):
                 result = result.tolist()
@@ -261,11 +324,21 @@ class CompositeTemplate(Template[NamedTuple, Dict[str, Any]]):
 
     def __repr__(self) -> str:
         return 'CompositeTemplate(' + repr({
-            **self._atomics,
-            **self._aliases,
+            **self.atomics,
+            **self.aliases,
         }) + ')'
 
     __str__ = __repr__
+
+    def write(self) -> Dict[str, Any]:
+        return {
+            **super().write(),
+            'atomics': {key: template.write() for key, template in self.atomics.items()},
+        }
+
+    @classmethod
+    def read(cls, json_dict: Dict[str, Any]) -> 'CompositeTemplate':
+        return cls({key: Template.read(template) for key, template in json_dict['atomics'].items()})
 
 
 class BaseGrid(Generic[InstanceType, ParsedType]):

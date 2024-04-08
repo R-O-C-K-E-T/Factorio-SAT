@@ -44,7 +44,7 @@ network = "factorio_sat.network:main"
 render = "factorio_sat.render:main"
 rotate = "factorio_sat.rotate:main"
 stringifier = "factorio_sat.stringifier:main"
-
+render_2 = "factorio_sat.render_2:main"
 [tool.setuptools]
 packages = [
     "factorio_sat",

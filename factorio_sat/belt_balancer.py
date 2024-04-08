@@ -379,8 +379,22 @@ def main():
     else:
         setup_balancer_ends(grid, network, args.aligned, args.use_ends)
 
+    (_, input_count), (_, output_count) = get_input_output_colours(network.elements())
+
     for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
-        print(json.dumps(solution.tolist()))
+        print(json.dumps({
+            'metadata': {
+                'underground_length': args.underground_length,
+                'aligned': args.aligned,
+                'use_ends': args.use_ends,
+                'turn_90': args.turn_90,
+                'turn_180': args.turn_180,
+                'input_count': input_count,
+                'output_count': output_count,
+            },
+            'template': grid.template.write(),
+            'tiles': solution.tolist()
+        }))
         if not args.all:
             break
 
