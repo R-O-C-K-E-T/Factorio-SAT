@@ -1,6 +1,6 @@
-{ sourceRoot ? ../., lib, buildPythonApplication
-, makeWrapper, setuptools, pygame, pillow, pyopengl, graphviz, ffmpeg-python
-, numpy, python-sat, luaparser, }:
+{ sourceRoot ? ../., lib, buildPythonApplication, makeWrapper, setuptools
+, pygame, pillow, pyopengl, graphviz, ffmpeg-python, numpy, python-sat
+, luaparser, }:
 let
   pyproject = lib.importTOML "${sourceRoot}/pyproject.toml";
   version = pyproject.project.version;
@@ -31,5 +31,13 @@ let
     preBuild = ''
       sed -i 's/python-sat/python-sat==${python-sat.version}/g' pyproject.toml
     '';
+
+    meta = {
+      inherit (pyproject.project.urls) homepage;
+      inherit (pyproject.project) description;
+      license = lib.licenses.gpl3Plus;
+      platforms = lib.platforms.all;
+      # mainProgram = there is none, use the factorio-sat-cli wrapper
+    };
   };
 in self
