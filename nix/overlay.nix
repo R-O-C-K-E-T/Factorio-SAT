@@ -1,7 +1,9 @@
 { self }:
-pkgs: pkgs0:
-let
+final: _:
+let pkgs = final;
+in let
   inherit (pkgs) lib;
+
   antlr4_7_2 = (pkgs.callPackage ./antlr { })."4.7.2";
   python = pkgs.python3.override {
     self = python;
