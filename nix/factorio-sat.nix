@@ -1,10 +1,13 @@
-{ sourceRoot ? ../., lib, buildPythonApplication, makeWrapper, setuptools
-, pygame, pillow, pyopengl, graphviz, ffmpeg-python, numpy, python-sat
-, luaparser, }:
+{ sourceRoot ? ../., lib, buildPythonApplication
+, makeWrapper, setuptools, pygame, pillow, pyopengl, graphviz, ffmpeg-python
+, numpy, python-sat, luaparser, }:
 let
+  pyproject = lib.importTOML "${sourceRoot}/pyproject.toml";
+  version = pyproject.project.version;
+
   self = buildPythonApplication {
-    pname = "Factorio-SAT";
-    version = "unstable";
+    pname = pyproject.project.name;
+    inherit version;
 
     src = sourceRoot;
     pyproject = true;
