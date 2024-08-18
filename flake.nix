@@ -17,7 +17,8 @@
     in {
       devShells = lib.mapAttrs (system: pkgs: {
         default = pkgs.mkShell {
-          packages = [ pkgs.factorio-sat pkgs.factorio-sat-cli ];
+          inputsFrom = with pkgs; [ factorio-sat ];
+          packages = with pkgs; [ factorio-sat factorio-sat-cli ];
         };
       }) pkgsFor;
 
