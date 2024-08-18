@@ -15,6 +15,14 @@
           overlays = [ self.overlays.default ];
         });
     in {
+      apps = lib.mapAttrs (system: pkgs: {
+        default = self.apps.${system}.cli;
+        cli = {
+          type = "app";
+          program = lib.getExe pkgs.factorio-sat-cli;
+        };
+      }) pkgsFor;
+
       devShells = lib.mapAttrs (system: pkgs: {
         default = pkgs.mkShell {
           inputsFrom = with pkgs; [ factorio-sat ];
