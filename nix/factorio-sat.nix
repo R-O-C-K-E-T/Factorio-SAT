@@ -38,6 +38,7 @@ let
       license = lib.licenses.gpl3Plus;
       platforms = lib.platforms.all;
       # mainProgram = there is none, use the factorio-sat-cli wrapper
+      maintainers = [ lib.maintainers.spikespaz ];
     };
   };
 in self
