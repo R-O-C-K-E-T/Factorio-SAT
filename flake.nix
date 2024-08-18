@@ -2,10 +2,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
     systems.url = "github:nix-systems/default-linux";
-    nixfmt.url = "github:serokell/nixfmt";
   };
 
-  outputs = { self, nixpkgs, systems, nixfmt }:
+  outputs = { self, nixpkgs, systems }:
     let
       inherit (nixpkgs) lib;
 
@@ -22,15 +21,14 @@
         };
       }) pkgsFor;
 
-      overlays = {
-        default = import ./nix/overlay.nix;
-      };
+      overlays = { default = import ./nix/overlay.nix; };
 
       packages = lib.mapAttrs (system: pkgs: {
         inherit (pkgs) factorio-sat factorio-sat-cli;
         default = self.packages.${system}.factorio-sat;
       }) pkgsFor;
 
-      formatter = eachSystem (system: nixfmt.packages.${system}.default);
+      formatter =
+        eachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-classic);
     };
 }
