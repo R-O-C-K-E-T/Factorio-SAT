@@ -4,7 +4,6 @@ let
     (lib.filterAttrs
       (name: kind: kind == "regular" && !(lib.hasPrefix "." name)))
     (lib.mapAttrsToList (name: _: name))
-    (lib.traceValSeq)
   ];
 in writeShellApplication {
   name = "factorio-sat";
