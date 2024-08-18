@@ -1,3 +1,4 @@
+{ self }:
 pkgs: pkgs0:
 let
   inherit (pkgs) lib;
@@ -12,7 +13,18 @@ let
       })
     ];
   };
+
+  mkDate = longDate:
+    (lib.concatStringsSep "-" [
+      (builtins.substring 0 4 longDate)
+      (builtins.substring 4 2 longDate)
+      (builtins.substring 6 2 longDate)
+    ]);
+  date = mkDate (self.lastModifiedDate or "19700101");
+  rev = self.shortRev or "dirty";
 in {
-  factorio-sat = python.pkgs.callPackage ./factorio-sat.nix { };
+  factorio-sat = python.pkgs.callPackage ./factorio-sat.nix {
+    versionSuffix = "+date=${date}_${rev}";
+  };
   factorio-sat-cli = pkgs.callPackage ./cli.nix { };
 }

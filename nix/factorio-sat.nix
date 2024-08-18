@@ -1,9 +1,12 @@
-{ sourceRoot ? ../., lib, buildPythonApplication, makeWrapper, setuptools
-, pygame, pillow, pyopengl, graphviz, ffmpeg-python, numpy, python-sat
-, luaparser, }:
+{ sourceRoot ? ../., versionSuffix ? null, lib, buildPythonApplication
+, makeWrapper, setuptools, pygame, pillow, pyopengl, graphviz, ffmpeg-python
+, numpy, python-sat, luaparser, }:
 let
   pyproject = lib.importTOML "${sourceRoot}/pyproject.toml";
-  version = pyproject.project.version;
+  version = if versionSuffix == null then
+    pyproject.project.version
+  else
+    pyproject.project.version + versionSuffix;
 
   self = buildPythonApplication {
     pname = pyproject.project.name;

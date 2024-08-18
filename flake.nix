@@ -30,7 +30,7 @@
         };
       }) pkgsFor;
 
-      overlays = { default = import ./nix/overlay.nix; };
+      overlays = { default = import ./nix/overlay.nix { inherit self; }; };
 
       packages = lib.mapAttrs (system: pkgs: {
         inherit (pkgs) factorio-sat factorio-sat-cli;
