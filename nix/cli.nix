@@ -16,6 +16,7 @@ in writeShellApplication {
       echo 'Need subcommand.'
       echo
       show_cmds
+      exit 1
     fi
 
     exe="$1"
