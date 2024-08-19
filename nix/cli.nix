@@ -25,7 +25,7 @@ in writeShellApplication {
       ${
         lib.concatMapStrings (exe: ''
           ${exe})
-            ${lib.getExe' factorio-sat exe} "$@"
+            '${lib.getExe' factorio-sat exe}' "$@"
             ;;
         '') exes
       }
