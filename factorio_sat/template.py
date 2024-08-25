@@ -149,10 +149,10 @@ class ArrayTemplate(Template[NestedArray[InstanceType], NestedArray[ParsedType]]
 
     @property
     def variable_count(self):
-        return int(np.product(self.shape)) * self.component.variable_count
+        return int(np.prod(self.shape)) * self.component.variable_count
 
     def instantiate(self, pool: IDPool) -> NestedArray[InstanceType]:
-        composed = np.empty(np.product(self.shape), dtype=object)
+        composed = np.empty(np.prod(self.shape), dtype=object)
         for i in range(len(composed)):
             composed[i] = self.component.instantiate(pool)
         return np.reshape(composed, self.shape).tolist()
