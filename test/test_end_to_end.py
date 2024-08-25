@@ -117,7 +117,7 @@ def tokenise(lines: List[str]) -> List[Token]:
     for row, line in line_iter:
         if not line.startswith(TEST_EDGE_START):
             if len(line) > 0 and line[0] in TEST_EDGES:
-                raise RuntimeError(f'Invalid line start character "{line[0]}" at line {row+1}')
+                raise RuntimeError(f'Invalid line start character "{line[0]}" at line {row + 1}')
 
             match = block_start.match(line)
             if match is not None:
@@ -143,7 +143,7 @@ def tokenise(lines: List[str]) -> List[Token]:
                 if not line.startswith(TEST_EDGE_MIDDLE):
                     break
             if not line.startswith(TEST_EDGE_STOP):
-                raise RuntimeError(f'Invalid test instance format at line {row+1}')
+                raise RuntimeError(f'Invalid test instance format at line {row + 1}')
             tokenised.append(Token('test', row + 1, stringifier.decode(test_case)))
     return tokenised
 

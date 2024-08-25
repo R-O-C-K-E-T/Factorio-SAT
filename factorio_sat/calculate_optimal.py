@@ -133,7 +133,8 @@ class LengthObjective(OptimisationObjective):
             if existence:
                 return None
 
-            if existence is None:
+            interior_area = (width - 2) * height
+            if interior_area >= len(store.network) * 2 and existence is None:
                 return size
             width += 1
 
@@ -149,6 +150,10 @@ class AreaObjective(OptimisationObjective):
         while True:
             for width, height in factors(area):
                 if height < min_height or height > 2 * min_height:
+                    continue
+
+                interior_area = width * height
+                if interior_area < len(store.network) * 2:
                     continue
 
                 size = underground_length, width + 2, height
