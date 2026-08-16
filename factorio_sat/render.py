@@ -80,10 +80,13 @@ def draw_texture(texture, width=None, height=None):
 
 
 def get_animation_length(solution):
+    animation_length = BELT_ANIMATION_LENGTH
     for tile in solution.reshape(-1):
         if tile.get('is_splitter') is True or (tile.get("tile") is not None and tile["tile"].get("type") == "splitter"):
-            return SPLITTER_ANIMATION_LENGTH
-    return BELT_ANIMATION_LENGTH
+            animation_length = max(animation_length, SPLITTER_ANIMATION_LENGTH)
+        if tile.get('is_assembling_machine') is True or (tile.get("tile") is not None and tile["tile"].get("type") == "assembling_machine"):
+            animation_length = max(animation_length, tilemaps.ASSEMBLING_MACHINE.frame_count)
+    return animation_length
 
 
 class RenderLayer(enum.Enum):
@@ -231,7 +234,12 @@ def render_tile(tile: BaseTile, animation: int, layer: RenderLayer):
             else:
                 assert False
 
-            tilemaps.ASSEMBLING_MACHINE.render(animation % 8, (animation // 8) % 4, lower=(lower_x, lower_y), upper=(upper_x, upper_y))
+            tilemaps.ASSEMBLING_MACHINE.render(
+                animation % tilemaps.ASSEMBLING_MACHINE.columns,
+                (animation // tilemaps.ASSEMBLING_MACHINE.columns) % tilemaps.ASSEMBLING_MACHINE.rows,
+                lower=(lower_x, lower_y),
+                upper=(upper_x, upper_y),
+            )
 
             glPopMatrix()
     else:
