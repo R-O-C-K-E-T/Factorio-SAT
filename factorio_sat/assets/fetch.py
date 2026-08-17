@@ -60,20 +60,27 @@ def find_asset(graphics_directory: str, entity: str, filename: str):
 
 
 def compose_assembling_machine(graphics_directory: str, destination: str):
-    """Build the combined sprite sheet expected by the renderer from 2.x layers."""
+    """Copy or build the combined sprite sheet expected by the renderer."""
     entity_directory = path.join(graphics_directory, 'assembling-machine-1')
-    legacy_source = path.join(entity_directory, 'hr-assembling-machine-1.png')
-    if path.isfile(legacy_source):
-        print(f'Copying: {legacy_source} -> {destination}')
-        shutil.copyfile(legacy_source, destination)
-        return
+
+    # Factorio 1.1 and 2.0 both provide the combined sheet, but 2.0 dropped the
+    # high-resolution filename prefix. Factorio 2.1 splits it into layers.
+    combined_sources = [
+        path.join(entity_directory, 'hr-assembling-machine-1.png'),
+        path.join(entity_directory, 'assembling-machine-1.png'),
+    ]
+    for source in combined_sources:
+        if path.isfile(source):
+            print(f'Copying: {source} -> {destination}')
+            shutil.copyfile(source, destination)
+            return
 
     base_source = path.join(entity_directory, 'assembling-machine-1-base.png')
     animation_source = path.join(entity_directory, 'assembling-machine-1-anim.png')
     if not path.isfile(base_source) or not path.isfile(animation_source):
         raise FileNotFoundError(
-            'Could not find either the Factorio 1.1 combined assembling-machine sprite '
-            'or the Factorio 2.x base and animation sprites'
+            'Could not find a Factorio 1.1/2.0 combined assembling-machine sprite '
+            'or the Factorio 2.1 base and animation sprites'
         )
 
     print(f'Composing: {base_source} + {animation_source} -> {destination}')
