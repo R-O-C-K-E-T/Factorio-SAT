@@ -291,6 +291,23 @@ def set_nonempty_tiles(grid: Grid, blueprint_or_json: str):
             grid.set_tile(col, row, tile)
 
 
+def clean_edges(grid: Grid):
+    for x in range(grid.width):
+        tile_a = grid.get_tile_instance(x, 0)
+        tile_b = grid.get_tile_instance(x, grid.height - 1)
+        grid.clauses.append([tile_a.is_empty, tile_a.is_belt])
+        grid.clauses += implies([tile_a.is_belt], [[tile_a.is_input, tile_a.is_output]])
+        grid.clauses.append([tile_b.is_empty, tile_b.is_belt])
+        grid.clauses += implies([tile_b.is_belt], [[tile_b.is_input, tile_b.is_output]])
+    for y in range(grid.height):
+        tile_a = grid.get_tile_instance(0, y)
+        tile_b = grid.get_tile_instance(grid.width - 1, y)
+        grid.clauses.append([tile_b.is_empty, tile_b.is_belt])
+        grid.clauses += implies([tile_a.is_belt], [[tile_a.is_input, tile_a.is_output]])
+        grid.clauses.append([tile_b.is_empty, tile_b.is_belt])
+        grid.clauses += implies([tile_b.is_belt], [[tile_b.is_input, tile_b.is_output]])
+
+
 def main():
     parser = argparse.ArgumentParser(description='Creates a belt balancer from a splitter graph')
     parser.add_argument('network', type=argparse.FileType('r'), help='Splitter network')
@@ -319,6 +336,7 @@ def main():
     parser.add_argument('--all', action='store_true', help='Generate all belt balancers')
     parser.add_argument('--solver', type=str, default='Glucose3', help='Backend SAT solver to use')
     parser.add_argument('--partial', type=argparse.FileType('r'), help='Partial balancer to base solution from')
+    parser.add_argument('--clean-edges', action='store_true', help="Disallow any non-belt tiles around the edges")
 
     args = parser.parse_args()
 
@@ -378,6 +396,9 @@ def main():
         pass
     else:
         setup_balancer_ends(grid, network, args.aligned, args.use_ends)
+
+    if args.clean_edges:
+        clean_edges(grid)
 
     for solution in grid.itersolve(solver=args.solver, ignore_colour=True):
         print(json.dumps(solution.tolist()))

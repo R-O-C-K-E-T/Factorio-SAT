@@ -97,6 +97,11 @@ class Grid(FactorioGrid[TileTemplate, Dict[str, Any]]):
             # Splitters must have at least one input/output
             self.clauses += implies([tile.is_splitter], [tile.all_direction])
 
+            # Inputs must be belts
+            self.clauses += implies([tile.is_input], [[tile.is_belt]])
+            # Outputs must be belts
+            self.clauses += implies([tile.is_output], [[tile.is_belt]])
+
             self.clauses += quadratic_amo(tile.input_direction)  # Have an input direction or nothing
             self.clauses += quadratic_amo(tile.output_direction)  # Have an output direction or nothing
 

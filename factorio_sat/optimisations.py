@@ -199,6 +199,8 @@ def expand_underground(grid: Grid, min_x: int = 0, min_y: int = 0, max_x: Option
                         -tiles[0].input_direction[direction],
                         -tiles[0].output_direction[direction],
                         -tiles[0].is_belt,
+                        tiles[0].is_input,
+                        tiles[0].is_output,
 
                         tiles[1].underground[direction],
 
@@ -218,6 +220,8 @@ def expand_underground(grid: Grid, min_x: int = 0, min_y: int = 0, max_x: Option
                         -tiles[-1].input_direction[direction],
                         -tiles[-1].output_direction[direction],
                         -tiles[-1].is_belt,
+                        tiles[-1].is_input,
+                        tiles[-1].is_output,
                     ])
 
 
